@@ -1,5 +1,4 @@
 import { NestFactory } from '@nestjs/core';
-import { VersioningType } from '@nestjs/common';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
@@ -31,11 +30,6 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api');
-
-  app.enableVersioning({
-    type: VersioningType.URI,
-    defaultVersion: '1',
-  });
 
   const port = process.env.PORT || 4000;
   await app.listen(port);
