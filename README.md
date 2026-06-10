@@ -30,13 +30,6 @@ cd project-cafeteria-inventario
 cp .env.example .env  # si existe, o crear manualmente
 ```
 
-El `.env` de la raiz necesita:
-
-```
-MONGO_USER=admin
-MONGO_PASSWORD=password123
-```
-
 3. Crear el archivo de variables de entorno del backend:
 
 ```bash
