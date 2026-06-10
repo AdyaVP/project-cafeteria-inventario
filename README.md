@@ -30,6 +30,7 @@ cd project-cafeteria-inventario
 cp .env.example .env  # si existe, o crear manualmente
 ```
 
+
 3. Crear el archivo de variables de entorno del backend:
 
 ```bash
