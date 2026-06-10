@@ -10,6 +10,9 @@ import { UsuariosModule } from './usuarios/usuarios.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { RolesGuard } from './common/guards/roles.guard.js';
 
+import { ProductosModule } from './productos/productos.module.js';
+import { InventarioModule } from './inventario/inventario.module.js';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -26,8 +29,11 @@ import { RolesGuard } from './common/guards/roles.guard.js';
       throttlers: [{ ttl: 60000, limit: 100 }],
     }),
     EventEmitterModule.forRoot(),
+
     AuthModule,
     UsuariosModule,
+    ProductosModule,
+    InventarioModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

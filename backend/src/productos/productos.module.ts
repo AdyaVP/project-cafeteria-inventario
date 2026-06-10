@@ -3,9 +3,12 @@ import { MongooseModule } from '@nestjs/mongoose';
 
 import { ProductosController } from './productos.controller';
 import { ProductosService } from './productos.service';
+import { RecetasService } from './recetas.service.js';
 
 import { Producto, ProductoSchema } from './schemas/producto.schema.js';
 import { Receta, RecetaSchema } from './schemas/receta.schema.js';
+
+import { RecetasController } from './recetas.controller.js';
 
 @Module({
   imports: [
@@ -20,8 +23,17 @@ import { Receta, RecetaSchema } from './schemas/receta.schema.js';
       },
     ]),
   ],
-  controllers: [ProductosController],
-  providers: [ProductosService],
-  exports: [ProductosService],
+  controllers: [
+    ProductosController,
+    RecetasController,
+    ],
+  providers: [
+    ProductosService,
+    RecetasService,
+  ],
+  exports: [
+    ProductosService,
+    RecetasService,
+  ],
 })
 export class ProductosModule {}
