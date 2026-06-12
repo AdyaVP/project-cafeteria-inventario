@@ -4,10 +4,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import type {
-  UpdateProductoDto,
-} from './dto/update-producto.dto.js';
-
 import { InjectModel } from '@nestjs/mongoose';
 
 import {
@@ -15,15 +11,33 @@ import {
   Types,
 } from 'mongoose';
 
+import type {
+  UpdateProductoDto,
+} from './dto/update-producto.dto.js';
+
+import type {
+  CreateProductoDto,
+} from './dto/create-producto.dto.js';
+
 import {
   Producto,
   ProductoDocument,
 } from './schemas/producto.schema.js';
 
-import type { CreateProductoDto } from './dto/create-producto.dto.js';
+import {
+  ProductoComida,
+} from './schemas/producto-comida.schema.js';
+
+import {
+  ProductoBebida,
+} from './schemas/producto-bebida.schema.js';
+
+import {
+  ProductoTipo,
+} from './schemas/producto-tipo.enum.js';
 
 import type {
-  ProductoResponse,
+  ProductoDetalle,
 } from './interfaces/producto-response.interface.js';
 
 @Injectable()
@@ -35,7 +49,7 @@ export class ProductosService {
 
   async crear(
     createProductoDto: CreateProductoDto,
-  ): Promise<ProductoResponse> {
+  ): Promise<ProductoDetalle> {
     const producto =
       await this.productoModel.create(
         createProductoDto,
@@ -44,7 +58,9 @@ export class ProductosService {
     return this.toResponse(producto);
   }
 
-  async listar(): Promise<ProductoResponse[]> {
+  async listar(): Promise<
+    ProductoDetalle[]
+  > {
     const productos =
       await this.productoModel.find();
 
@@ -55,7 +71,7 @@ export class ProductosService {
 
   async buscarPorId(
     id: string,
-  ): Promise<ProductoResponse> {
+  ): Promise<ProductoDetalle> {
     this.validarObjectId(id);
 
     const producto =
@@ -71,7 +87,7 @@ export class ProductosService {
   }
 
   async listarDisponibles(): Promise<
-    ProductoResponse[]
+    ProductoDetalle[]
   > {
     const productos =
       await this.productoModel.find({
@@ -86,7 +102,7 @@ export class ProductosService {
   async actualizar(
     id: string,
     datos: UpdateProductoDto,
-  ): Promise<ProductoResponse> {
+  ): Promise<ProductoDetalle> {
     this.validarObjectId(id);
 
     const producto =
@@ -107,7 +123,7 @@ export class ProductosService {
 
   async toggleDisponibilidad(
     id: string,
-  ): Promise<ProductoResponse> {
+  ): Promise<ProductoDetalle> {
     this.validarObjectId(id);
 
     const producto =
@@ -129,8 +145,8 @@ export class ProductosService {
 
   private toResponse(
     producto: ProductoDocument,
-  ): ProductoResponse {
-    return {
+  ): ProductoDetalle {
+    const base = {
       id: producto._id.toString(),
       nombre: producto.nombre,
       descripcion: producto.descripcion,
@@ -138,6 +154,37 @@ export class ProductosService {
       disponible: producto.disponible,
       imagenUrl: producto.imagenUrl,
       tipo: producto.tipo,
+    };
+
+    if (
+      producto.tipo ===
+      ProductoTipo.COMIDA
+    ) {
+      const comida =
+        producto as ProductoComida &
+          ProductoDocument;
+
+      return {
+        ...base,
+        tiempoPreparacionMin:
+          comida.tiempoPreparacionMin ?? 0,
+        calorias: comida.calorias,
+        alergenos:
+          comida.alergenos ?? [],
+      };
+    }
+
+    const bebida =
+      producto as ProductoBebida &
+        ProductoDocument;
+
+    return {
+      ...base,
+      temperatura:
+        bebida.temperatura,
+      tamanosDisponibles:
+        bebida.tamanosDisponibles ??
+        [],
     };
   }
 
