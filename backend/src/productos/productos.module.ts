@@ -3,12 +3,28 @@ import { MongooseModule } from '@nestjs/mongoose';
 
 import { ProductosController } from './productos.controller';
 import { ProductosService } from './productos.service';
+import { RecetasController } from './recetas.controller.js';
 import { RecetasService } from './recetas.service.js';
 
-import { Producto, ProductoSchema } from './schemas/producto.schema.js';
-import { Receta, RecetaSchema } from './schemas/receta.schema.js';
+import {
+  Producto,
+  ProductoSchema,
+} from './schemas/producto.schema.js';
 
-import { RecetasController } from './recetas.controller.js';
+import {
+  ProductoComida,
+  ProductoComidaSchema,
+} from './schemas/producto-comida.schema.js';
+
+import {
+  ProductoBebida,
+  ProductoBebidaSchema,
+} from './schemas/producto-bebida.schema.js';
+
+import {
+  Receta,
+  RecetaSchema,
+} from './schemas/receta.schema.js';
 
 @Module({
   imports: [
@@ -16,6 +32,16 @@ import { RecetasController } from './recetas.controller.js';
       {
         name: Producto.name,
         schema: ProductoSchema,
+        discriminators: [
+          {
+            name: ProductoComida.name,
+            schema: ProductoComidaSchema,
+          },
+          {
+            name: ProductoBebida.name,
+            schema: ProductoBebidaSchema,
+          },
+        ],
       },
       {
         name: Receta.name,
@@ -26,7 +52,7 @@ import { RecetasController } from './recetas.controller.js';
   controllers: [
     ProductosController,
     RecetasController,
-    ],
+  ],
   providers: [
     ProductosService,
     RecetasService,

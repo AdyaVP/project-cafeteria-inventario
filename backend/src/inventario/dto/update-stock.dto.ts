@@ -1,9 +1,6 @@
 import { z } from 'zod';
 
-export enum OperacionStock {
-  AGREGAR = 'AGREGAR',
-  DESCONTAR = 'DESCONTAR',
-}
+import { OperacionStock } from '../schemas/operacion-stock.enum.js';
 
 export const UpdateStockSchema = z.object({
   cantidad: z.number().positive(),

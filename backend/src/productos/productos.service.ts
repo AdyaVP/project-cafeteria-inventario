@@ -1,6 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+
+import type {
+  UpdateProductoDto,
+} from './dto/update-producto.dto.js';
+
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+
+import {
+  Model,
+  Types,
+} from 'mongoose';
 
 import {
   Producto,
@@ -8,6 +21,10 @@ import {
 } from './schemas/producto.schema.js';
 
 import type { CreateProductoDto } from './dto/create-producto.dto.js';
+
+import type {
+  ProductoResponse,
+} from './interfaces/producto-response.interface.js';
 
 @Injectable()
 export class ProductosService {
@@ -18,47 +35,88 @@ export class ProductosService {
 
   async crear(
     createProductoDto: CreateProductoDto,
-  ): Promise<Producto> {
-    return this.productoModel.create(createProductoDto);
+  ): Promise<ProductoResponse> {
+    const producto =
+      await this.productoModel.create(
+        createProductoDto,
+      );
+
+    return this.toResponse(producto);
   }
 
-  async listar(): Promise<Producto[]> {
-    return this.productoModel.find().exec();
+  async listar(): Promise<ProductoResponse[]> {
+    const productos =
+      await this.productoModel.find();
+
+    return productos.map((producto) =>
+      this.toResponse(producto),
+    );
   }
 
   async buscarPorId(
     id: string,
-  ): Promise<Producto | null> {
-    return this.productoModel.findById(id).exec();
-  }
+  ): Promise<ProductoResponse> {
+    this.validarObjectId(id);
 
-  // PEGAR AQUÍ ↓↓↓
-
-  async listarDisponibles(): Promise<Producto[]> {
-    return this.productoModel.find({
-      disponible: true,
-    }).exec();
-  }
-
-  async actualizar(
-    id: string,
-    datos: Partial<Producto>,
-  ): Promise<Producto | null> {
-    return this.productoModel.findByIdAndUpdate(
-      id,
-      datos,
-      { new: true },
-    ).exec();
-  }
-
-  async toggleDisponibilidad(
-    id: string,
-  ): Promise<Producto | null> {
     const producto =
       await this.productoModel.findById(id);
 
     if (!producto) {
-      return null;
+      throw new NotFoundException(
+        'Producto no encontrado',
+      );
+    }
+
+    return this.toResponse(producto);
+  }
+
+  async listarDisponibles(): Promise<
+    ProductoResponse[]
+  > {
+    const productos =
+      await this.productoModel.find({
+        disponible: true,
+      });
+
+    return productos.map((producto) =>
+      this.toResponse(producto),
+    );
+  }
+
+  async actualizar(
+    id: string,
+    datos: UpdateProductoDto,
+  ): Promise<ProductoResponse> {
+    this.validarObjectId(id);
+
+    const producto =
+      await this.productoModel.findByIdAndUpdate(
+        id,
+        datos,
+        { new: true },
+      );
+
+    if (!producto) {
+      throw new NotFoundException(
+        'Producto no encontrado',
+      );
+    }
+
+    return this.toResponse(producto);
+  }
+
+  async toggleDisponibilidad(
+    id: string,
+  ): Promise<ProductoResponse> {
+    this.validarObjectId(id);
+
+    const producto =
+      await this.productoModel.findById(id);
+
+    if (!producto) {
+      throw new NotFoundException(
+        'Producto no encontrado',
+      );
     }
 
     producto.disponible =
@@ -66,6 +124,30 @@ export class ProductosService {
 
     await producto.save();
 
-    return producto;
+    return this.toResponse(producto);
+  }
+
+  private toResponse(
+    producto: ProductoDocument,
+  ): ProductoResponse {
+    return {
+      id: producto._id.toString(),
+      nombre: producto.nombre,
+      descripcion: producto.descripcion,
+      precio: producto.precio,
+      disponible: producto.disponible,
+      imagenUrl: producto.imagenUrl,
+      tipo: producto.tipo,
+    };
+  }
+
+  private validarObjectId(
+    id: string,
+  ): void {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException(
+        'ID inválido',
+      );
+    }
   }
 }

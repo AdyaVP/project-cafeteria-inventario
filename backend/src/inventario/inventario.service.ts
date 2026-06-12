@@ -1,6 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+
+import {
+  Model,
+  Types,
+} from 'mongoose';
 
 import {
   InventarioItem,
@@ -9,6 +19,10 @@ import {
 
 import type { CreateInventarioItemDto } from './dto/create-inventario-item.dto.js';
 
+import type {
+  InventarioResponse,
+} from './interfaces/inventario-response.interface.js';
+
 @Injectable()
 export class InventarioService {
   constructor(
@@ -16,57 +30,166 @@ export class InventarioService {
     private readonly inventarioModel: Model<InventarioItemDocument>,
   ) {}
 
-  // Crear ingrediente o insumo
   async crear(
     dto: CreateInventarioItemDto,
-  ): Promise<InventarioItem> {
-    return this.inventarioModel.create(dto);
+  ): Promise<InventarioResponse> {
+    const existente =
+      await this.inventarioModel.findOne({
+        nombre: dto.nombre,
+      });
+
+    if (existente) {
+      throw new ConflictException(
+        'Ya existe un insumo con ese nombre',
+      );
+    }
+
+    const item =
+      await this.inventarioModel.create(dto);
+
+    return this.toResponse(item);
   }
 
-  // Obtener todos los insumos
-  async listar(): Promise<InventarioItem[]> {
-    return this.inventarioModel.find().exec();
+  async listar(): Promise<
+    InventarioResponse[]
+  > {
+    const items =
+      await this.inventarioModel.find();
+
+    return items.map((item) =>
+      this.toResponse(item),
+    );
   }
 
-  // Buscar por id
   async buscarPorId(
     id: string,
-  ): Promise<InventarioItem | null> {
-    return this.inventarioModel.findById(id).exec();
-  }
+  ): Promise<InventarioResponse> {
+    this.validarObjectId(id);
 
-  // Ajustar stock
-  async ajustarStock(
-    id: string,
-    cantidad: number,
-    operacion: 'AGREGAR' | 'DESCONTAR',
-  ): Promise<InventarioItem | null> {
     const item =
       await this.inventarioModel.findById(id);
 
     if (!item) {
-      return null;
+      throw new NotFoundException(
+        'Insumo no encontrado',
+      );
+    }
+
+    return this.toResponse(item);
+  }
+
+  async ajustarStock(
+    id: string,
+    cantidad: number,
+    operacion: 'AGREGAR' | 'DESCONTAR',
+  ): Promise<InventarioResponse> {
+    this.validarObjectId(id);
+
+    const item =
+      await this.inventarioModel.findById(id);
+
+    if (!item) {
+      throw new NotFoundException(
+        'Insumo no encontrado',
+      );
     }
 
     if (operacion === 'AGREGAR') {
       item.stockActual += cantidad;
     } else {
+      if (
+        item.stockActual - cantidad < 0
+      ) {
+        throw new BadRequestException(
+          'Stock insuficiente',
+        );
+      }
+
       item.stockActual -= cantidad;
     }
 
     await item.save();
 
-    return item;
+    return this.toResponse(item);
   }
 
-  // Obtener productos con stock bajo
-  async obtenerAlertas(): Promise<InventarioItem[]> {
+  async obtenerAlertas(): Promise<
+    InventarioResponse[]
+  > {
     const items =
-      await this.inventarioModel.find().exec();
+      await this.inventarioModel.find({
+        $expr: {
+          $lte: [
+            '$stockActual',
+            '$stockMinimo',
+          ],
+        },
+      });
 
-    return items.filter(
-      (item) =>
-        item.stockActual <= item.stockMinimo,
+    return items.map((item) =>
+      this.toResponse(item),
     );
+  }
+
+  async descontarPorReceta(
+    ingredientes: {
+      inventarioItemId: string;
+      cantidad: number;
+    }[],
+  ): Promise<void> {
+    for (const ingrediente of ingredientes) {
+      this.validarObjectId(
+        ingrediente.inventarioItemId,
+      );
+
+      const item =
+        await this.inventarioModel.findById(
+          ingrediente.inventarioItemId,
+        );
+
+      if (!item) {
+        throw new NotFoundException(
+          `Insumo no encontrado: ${ingrediente.inventarioItemId}`,
+        );
+      }
+
+      if (
+        item.stockActual <
+        ingrediente.cantidad
+      ) {
+        throw new BadRequestException(
+          `Stock insuficiente para ${item.nombre}`,
+        );
+      }
+
+      item.stockActual -=
+        ingrediente.cantidad;
+
+      await item.save();
+    }
+  }
+
+  private toResponse(
+    item: InventarioItemDocument,
+  ): InventarioResponse {
+    return {
+      id: item._id.toString(),
+      nombre: item.nombre,
+      unidad: item.unidad,
+      stockActual: item.stockActual,
+      stockMinimo: item.stockMinimo,
+      costoUnitario: item.costoUnitario,
+      activo: item.activo,
+    };
+  }
+
+  private validarObjectId(
+    id: string,
+  ): void {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException(
+        'ID inválido',
+      );
+    }
   }
 }
