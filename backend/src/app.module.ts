@@ -12,6 +12,7 @@ import { RolesGuard } from './common/guards/roles.guard.js';
 
 import { ProductosModule } from './productos/productos.module.js';
 import { InventarioModule } from './inventario/inventario.module.js';
+import { MesasModule } from './mesas/mesas.module.js'; // <-- NUEVO
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { InventarioModule } from './inventario/inventario.module.js';
     UsuariosModule,
     ProductosModule,
     InventarioModule,
+    MesasModule, // <-- NUEVO
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
