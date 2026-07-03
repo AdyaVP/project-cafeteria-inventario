@@ -9,14 +9,12 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-
       - name: Construir y levantar contenedores
         run: |
           cd ~/cafeteria
           echo "Actualizando código..."
-          git pull origin develop
+          git fetch origin develop
+          git reset --hard origin/develop
 
           echo "Construyendo y levantando contenedores..."
           docker compose -f docker-compose.prod.yml --env-file .env up -d --build
@@ -24,4 +22,4 @@ jobs:
           echo "Limpiando imágenes antiguas..."
           docker image prune -f
 
-          echo "Deploy completado"
+          echo "✅ Deploy completado"
