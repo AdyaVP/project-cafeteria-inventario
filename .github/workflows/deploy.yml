@@ -1,0 +1,34 @@
+name: Deploy to Raspberry Pi
+
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Deploy a la Raspberry via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            cd /home/valeria-portillo/cafeteria
+
+            echo "Actualizando código..."
+            git pull origin develop
+
+            echo "Construyendo y levantando contenedores..."
+            docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+
+            echo "Limpiando imágenes antiguas..."
+            docker image prune -f
+
+            echo "Deploy completado"
