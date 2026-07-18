@@ -168,7 +168,7 @@ docs(readme): agregar instrucciones de setup
    git push origin feature/tu-rama
    ```
 3. Abre el PR en GitHub apuntando a `develop` — **nunca a `main`**
-4. Espera el review de **@ValeriaC** antes de mergear
+4. Espera el review  antes de mergear
 5. No mergees tu propio PR
 
 ---

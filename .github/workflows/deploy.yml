@@ -1,0 +1,25 @@
+name: Deploy to Raspberry Pi
+
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Construir y levantar contenedores
+        run: |
+          cd ~/cafeteria
+          echo "Actualizando código..."
+          git fetch origin develop
+          git reset --hard origin/develop
+
+          echo "Construyendo y levantando contenedores..."
+          docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+
+          echo "Limpiando imágenes antiguas..."
+          docker image prune -f
+
+          echo "✅ Deploy completado"
