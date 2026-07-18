@@ -60,6 +60,7 @@ export class Orden {
     },
   })
   items: {
+    _id: Types.ObjectId;
     producto: Types.ObjectId;
     cantidad: number;
     notas?: string;

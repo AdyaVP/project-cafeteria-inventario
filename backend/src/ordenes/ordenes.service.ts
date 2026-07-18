@@ -76,9 +76,9 @@ export class OrdenesService {
       );
     }
 
-    const productosLookup = await this._validarProductos(dto.items);
+    const productosValidados = await this._validarProductos(dto.items);
 
-    const grupos = this._separarItemsPorTipo(dto.items, productosLookup);
+    const grupos = this._separarItemsPorTipo(dto.items, productosValidados);
 
     await this._verificarStock(grupos);
 
@@ -303,14 +303,14 @@ export class OrdenesService {
 
   private _separarItemsPorTipo(
     items: CrearOrdenItemDto[],
-    productosLookup: Map<string, ProductoDetalle>,
+    productosValidados: Map<string, ProductoDetalle>,
   ): GrupoItems[] {
     const grupos: GrupoItems[] = [];
     const itemsCocina: ItemProcesado[] = [];
     const itemsCafeteria: ItemProcesado[] = [];
 
     for (const item of items) {
-      const producto = productosLookup.get(item.productoId);
+      const producto = productosValidados.get(item.productoId);
 
       if (!producto) {
         continue;
