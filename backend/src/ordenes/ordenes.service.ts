@@ -183,6 +183,57 @@ export class OrdenesService {
     );
   }
 
+  async marcarEnPreparacion(
+    ordenId: string,
+  ): Promise<OrdenCocinaResponse | OrdenCafeteriaResponse> {
+    const orden = await this._buscarOrdenPorId(ordenId);
+
+    if (orden.estadoGeneral !== OrdenEstado.PENDIENTE) {
+      throw new BadRequestException(
+        `La orden debe estar en estado PENDIENTE. Estado actual: ${orden.estadoGeneral}`,
+      );
+    }
+
+    orden.estadoGeneral = OrdenEstado.EN_PREPARACION;
+    await orden.save();
+
+    const ordenPopulada = await this.ordenModel
+      .findById(orden._id)
+      .populate('mesa', 'numero')
+      .populate('mesero', 'nombre')
+      .populate('items.producto', 'nombre precio')
+      .exec();
+
+    return this._toResponse(ordenPopulada as unknown as DocumentoOrdenPopulado);
+  }
+
+  async marcarLista(
+    ordenId: string,
+  ): Promise<OrdenCocinaResponse | OrdenCafeteriaResponse> {
+    const orden = await this._buscarOrdenPorId(ordenId);
+
+    if (orden.estadoGeneral !== OrdenEstado.EN_PREPARACION) {
+      throw new BadRequestException(
+        `La orden debe estar en estado EN_PREPARACION. Estado actual: ${orden.estadoGeneral}`,
+      );
+    }
+
+    orden.estadoGeneral = OrdenEstado.LISTA;
+    orden.items.forEach(item => {
+      item.estadoItem = ItemEstado.LISTO;
+    });
+    await orden.save();
+
+    const ordenPopulada = await this.ordenModel
+      .findById(orden._id)
+      .populate('mesa', 'numero')
+      .populate('mesero', 'nombre')
+      .populate('items.producto', 'nombre precio')
+      .exec();
+
+    return this._toResponse(ordenPopulada as unknown as DocumentoOrdenPopulado);
+  }
+
   async actualizarEstadoItem(
     ordenId: string,
     itemId: string,
