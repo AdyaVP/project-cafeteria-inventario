@@ -14,9 +14,10 @@ import { Roles } from '../common/decorators/roles.decorator.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe.js';
-import { JwtPayload } from '../common/interfaces/jwt-payload.interface.js';
+import type { JwtPayload } from '../common/interfaces/jwt-payload.interface.js';
 
-import { CrearOrdenSchema, CrearOrdenDto } from './dto/crear-orden.dto.js';
+import { CrearOrdenSchema } from './dto/crear-orden.dto.js';
+import type { CrearOrdenDto } from './dto/crear-orden.dto.js';
 import { OrdenCocinaResponse, OrdenCafeteriaResponse } from './interfaces/orden-response.interface.js';
 import { OrdenesService } from './ordenes.service.js';
 

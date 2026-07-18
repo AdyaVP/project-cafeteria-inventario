@@ -12,7 +12,9 @@ import { RolesGuard } from './common/guards/roles.guard.js';
 
 import { ProductosModule } from './productos/productos.module.js';
 import { InventarioModule } from './inventario/inventario.module.js';
-import { MesasModule } from './mesas/mesas.module.js'; // <-- NUEVO
+import { MesasModule } from './mesas/mesas.module.js';
+import { OrdenesModule } from './ordenes/ordenes.module.js';
+import { CocinaModule } from './cocina/cocina.module.js';
 
 @Module({
   imports: [
@@ -35,7 +37,9 @@ import { MesasModule } from './mesas/mesas.module.js'; // <-- NUEVO
     UsuariosModule,
     ProductosModule,
     InventarioModule,
-    MesasModule, // <-- NUEVO
+    MesasModule,
+    OrdenesModule,
+    CocinaModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

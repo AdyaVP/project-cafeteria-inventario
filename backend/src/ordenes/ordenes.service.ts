@@ -12,7 +12,7 @@ import { MesasService } from '../mesas/mesas.service.js';
 import { ProductosService } from '../productos/productos.service.js';
 import { RecetasService } from '../productos/recetas.service.js';
 import { InventarioService } from '../inventario/inventario.service.js';
-import { ProductoDetalle } from '../productos/interfaces/producto-response.interface.js';
+import { ProductoDetalle, ProductoComidaResponse } from '../productos/interfaces/producto-response.interface.js';
 import { ProductoTipo } from '../productos/schemas/producto-tipo.enum.js';
 
 import { Orden, OrdenDocument } from './schemas/orden.schema.js';
@@ -37,7 +37,8 @@ interface GrupoItems {
   items: ItemProcesado[];
 }
 
-interface DocumentoOrdenPopulado extends Omit<OrdenDocument, 'mesa' | 'mesero'> {
+interface DocumentoOrdenPopulado {
+  _id: Types.ObjectId;
   mesa: { _id: Types.ObjectId; numero: number };
   mesero: { _id: Types.ObjectId; nombre: string };
   items: Array<{
@@ -47,6 +48,11 @@ interface DocumentoOrdenPopulado extends Omit<OrdenDocument, 'mesa' | 'mesero'> 
     notas?: string;
     estadoItem: ItemEstado;
   }>;
+  estadoGeneral: OrdenEstado;
+  tipo: TipoOrden;
+  createdAt: Date;
+  updatedAt: Date;
+  toObject: () => Record<string, unknown>;
 }
 
 @Injectable()
@@ -325,7 +331,8 @@ export class OrdenesService {
       };
 
       if (producto.tipo === ProductoTipo.COMIDA) {
-        procesado.tiempoPreparacionMin = producto.tiempoPreparacionMin ?? 0;
+        const comidaProducto = producto as ProductoComidaResponse;
+        procesado.tiempoPreparacionMin = comidaProducto.tiempoPreparacionMin ?? 0;
         itemsCocina.push(procesado);
       } else {
         itemsCafeteria.push(procesado);
@@ -439,24 +446,28 @@ export class OrdenesService {
           0,
         );
 
-        const orden = await this.ordenModel.create({
+        const datos = {
           mesa: mesaObjectId,
           mesero: meseroObjectId,
           items,
           estadoGeneral: OrdenEstado.PENDIENTE,
           tipo: TipoOrden.COCINA,
           tiempoEstimadoMin,
-        });
+        } as Record<string, unknown>;
+
+        const orden = await this.ordenModel.create(datos);
 
         ids.push(orden._id);
       } else {
-        const orden = await this.ordenModel.create({
+        const datos = {
           mesa: mesaObjectId,
           mesero: meseroObjectId,
           items,
           estadoGeneral: OrdenEstado.PENDIENTE,
           tipo: TipoOrden.CAFETERIA,
-        });
+        } as Record<string, unknown>;
+
+        const orden = await this.ordenModel.create(datos);
 
         ids.push(orden._id);
       }
