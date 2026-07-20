@@ -6,6 +6,13 @@ import { Role } from '../common/constants/roles.enum';
 import { OrdenEstado } from '../ordenes/schemas/orden-estado.enum';
 import { CocinaGateway } from './cocina.gateway';
 
+import {
+  SALA_COCINA,
+  EVENTO_WS_NUEVA_ORDEN,
+  EVENTO_WS_ORDEN_ACTUALIZADA,
+  EVENTO_WS_MESA_ACTUALIZADA,
+} from './cocina.constants';
+
 describe('CocinaGateway', () => {
   let gateway: CocinaGateway;
   let mockJwtService: Record<string, jest.Mock>;
@@ -57,7 +64,7 @@ describe('CocinaGateway', () => {
 
       await gateway.handleConnection(mockClient as unknown as Socket);
 
-      expect(mockClient.join).toHaveBeenCalledWith('cocina');
+      expect(mockClient.join).toHaveBeenCalledWith(SALA_COCINA);
       expect(mockClient.disconnect).not.toHaveBeenCalled();
       expect((mockClient.data as Record<string, unknown>).usuario).toEqual(
         PAYLOAD_COCINA,
@@ -113,8 +120,8 @@ describe('CocinaGateway', () => {
 
       gateway.manejarOrdenCreada(payload);
 
-      expect(mockServer.to).toHaveBeenCalledWith('cocina');
-      expect(mockServer.emit).toHaveBeenCalledWith('nueva-orden', payload);
+      expect(mockServer.to).toHaveBeenCalledWith(SALA_COCINA);
+      expect(mockServer.emit).toHaveBeenCalledWith(EVENTO_WS_NUEVA_ORDEN, payload);
     });
   });
 
@@ -129,7 +136,7 @@ describe('CocinaGateway', () => {
       gateway.manejarMesaCambiada(payload);
 
       expect(mockServer.emit).toHaveBeenCalledWith(
-        'mesa-actualizada',
+        EVENTO_WS_MESA_ACTUALIZADA,
         payload,
       );
     });
@@ -139,9 +146,9 @@ describe('CocinaGateway', () => {
     it('debe emitir orden-actualizada al room cocina', () => {
       gateway.emitirEstadoOrden('orden-1', OrdenEstado.LISTA);
 
-      expect(mockServer.to).toHaveBeenCalledWith('cocina');
+      expect(mockServer.to).toHaveBeenCalledWith(SALA_COCINA);
       expect(mockServer.emit).toHaveBeenCalledWith(
-        'orden-actualizada',
+        EVENTO_WS_ORDEN_ACTUALIZADA,
         expect.objectContaining({
           ordenId: 'orden-1',
           nuevoEstado: OrdenEstado.LISTA,

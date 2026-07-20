@@ -20,6 +20,7 @@ export class CocinaService {
 
   async marcarEnPreparacion(
     ordenId: string,
+    cocineroId: string,
   ): Promise<OrdenCocinaResponse> {
     const response = await this.ordenesService.marcarEnPreparacion(ordenId);
 

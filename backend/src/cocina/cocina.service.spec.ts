@@ -23,6 +23,7 @@ import { CocinaGateway } from './cocina.gateway';
 import { CocinaService } from './cocina.service';
 
 const ORDEN_ID = '507f1f77bcf86cd799439011';
+const COCINERO_ID = '507f1f77bcf86cd799439022';
 
 function mockResponse(overrides: Partial<OrdenCocinaResponse> = {}): OrdenCocinaResponse {
   return {
@@ -84,9 +85,10 @@ describe('CocinaService', () => {
       const response = mockResponse({ estadoGeneral: OrdenEstado.EN_PREPARACION });
       mockOrdenesService.marcarEnPreparacion.mockResolvedValue(response);
 
-      const resultado = await service.marcarEnPreparacion(ORDEN_ID);
+      const resultado = await service.marcarEnPreparacion(ORDEN_ID, COCINERO_ID);
 
       expect(resultado.estadoGeneral).toBe(OrdenEstado.EN_PREPARACION);
+      expect(mockOrdenesService.marcarEnPreparacion).toHaveBeenCalledWith(ORDEN_ID);
       expect(mockGateway.emitirEstadoOrden).toHaveBeenCalledWith(
         ORDEN_ID,
         OrdenEstado.EN_PREPARACION,
@@ -97,7 +99,7 @@ describe('CocinaService', () => {
       const response = mockResponse({ tipo: TipoOrden.CAFETERIA });
       mockOrdenesService.marcarEnPreparacion.mockResolvedValue(response);
 
-      await expect(service.marcarEnPreparacion(ORDEN_ID)).rejects.toThrow(
+      await expect(service.marcarEnPreparacion(ORDEN_ID, COCINERO_ID)).rejects.toThrow(
         'La orden no es de tipo COCINA',
       );
       expect(mockGateway.emitirEstadoOrden).not.toHaveBeenCalled();

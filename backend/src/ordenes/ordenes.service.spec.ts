@@ -58,25 +58,52 @@ const dtoBase = {
 };
 
 function mockDoc(overrides: Record<string, unknown> = {}) {
-  return {
-    _id: new Types.ObjectId(),
+  const _id = new Types.ObjectId();
+  const base = {
+    _id,
     save: jest.fn().mockResolvedValue(undefined),
-    toObject: jest.fn().mockReturnValue({}),
+    toObject: jest.fn(),
     mesa: { _id: new Types.ObjectId(), numero: 5 },
     mesero: { _id: new Types.ObjectId(), nombre: 'Test' },
-    items: [],
+    items: [] as Array<Record<string, unknown>>,
     estadoGeneral: OrdenEstado.PENDIENTE,
-    tipo: TipoOrden.COCINA,
+    tipo: TipoOrden.COCINA as string,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
   };
+
+  const populated = {
+    _id,
+    mesa: { _id: base.mesa._id, numero: 5 },
+    mesero: { _id: base.mesero._id, nombre: 'Test' },
+    items: base.items.map((item: Record<string, unknown>) => ({
+      _id: item._id ?? new Types.ObjectId(),
+      producto: { _id: item.producto ?? new Types.ObjectId(), nombre: 'Test', precio: 100 },
+      cantidad: item.cantidad ?? 1,
+      notas: item.notas,
+      estadoItem: item.estadoItem ?? ItemEstado.PENDIENTE,
+    })),
+    estadoGeneral: base.estadoGeneral,
+    tipo: base.tipo,
+    notaChef: undefined as string | undefined,
+    tiempoEstimadoMin: undefined as number | undefined,
+    temperatura: undefined as string | undefined,
+    tamano: undefined as string | undefined,
+    createdAt: base.createdAt,
+    updatedAt: base.updatedAt,
+  };
+
+  base.toObject = jest.fn().mockReturnValue(populated);
+
+  return base;
 }
 
 function mockQuery(resultado: unknown) {
   return {
     populate: jest.fn().mockReturnThis(),
     sort: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
     exec: jest.fn().mockResolvedValue(resultado),
   };
 }
@@ -101,7 +128,7 @@ describe('OrdenesService', () => {
       find: jest.fn(),
       findById: jest.fn(),
       create: jest.fn(),
-      discriminators: {},
+      discriminators: {} as jest.Mock,
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -310,4 +337,5 @@ describe('OrdenesService', () => {
       expect(doc.save).toHaveBeenCalled();
     });
   });
+
 });

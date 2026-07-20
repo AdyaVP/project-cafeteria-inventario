@@ -13,6 +13,15 @@ import { Role } from '../common/constants/roles.enum.js';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface.js';
 import { OrdenEstado } from '../ordenes/schemas/orden-estado.enum.js';
 
+import {
+  SALA_COCINA,
+  EVENTO_WS_NUEVA_ORDEN,
+  EVENTO_WS_ORDEN_ACTUALIZADA,
+  EVENTO_WS_MESA_ACTUALIZADA,
+  EVENTO_ORDEN_CREADA,
+  EVENTO_MESA_ESTADO_CAMBIADO,
+} from './cocina.constants.js';
+
 interface OrdenCreadaPayload {
   ordenes: unknown[];
   mesaId: string;
@@ -26,7 +35,7 @@ interface MesaCambiadaPayload {
 }
 
 @WebSocketGateway({
-  cors: { origin: process.env.FRONTEND_URL ?? '*', credentials: true },
+  cors: { origin: process.env.FRONTEND_URL, credentials: true },
   namespace: '/cocina',
 })
 @Injectable()
@@ -52,7 +61,7 @@ export class CocinaGateway
       client.data.usuario = payload;
 
       if (payload.roles.includes(Role.COCINA)) {
-        client.join('cocina');
+        client.join(SALA_COCINA);
       }
     } catch {
       client.disconnect();
@@ -61,21 +70,21 @@ export class CocinaGateway
 
   handleDisconnect(_client: Socket): void {}
 
-  @OnEvent('orden.creada')
+  @OnEvent(EVENTO_ORDEN_CREADA)
   manejarOrdenCreada(payload: OrdenCreadaPayload): void {
-    this.server.to('cocina').emit('nueva-orden', payload);
+    this.server.to(SALA_COCINA).emit(EVENTO_WS_NUEVA_ORDEN, payload);
   }
 
-  @OnEvent('mesa.estado.cambiado')
+  @OnEvent(EVENTO_MESA_ESTADO_CAMBIADO)
   manejarMesaCambiada(payload: MesaCambiadaPayload): void {
-    this.server.emit('mesa-actualizada', payload);
+    this.server.emit(EVENTO_WS_MESA_ACTUALIZADA, payload);
   }
 
   emitirEstadoOrden(
     ordenId: string,
     nuevoEstado: OrdenEstado,
   ): void {
-    this.server.to('cocina').emit('orden-actualizada', {
+    this.server.to(SALA_COCINA).emit(EVENTO_WS_ORDEN_ACTUALIZADA, {
       ordenId,
       nuevoEstado,
       timestamp: new Date(),

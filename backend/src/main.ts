@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import { AppModule } from './app.module';
+import { AppModule } from './app.module.js';
 
 const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'PORT'] as const;
 

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Model, Types } from 'mongoose';
+import { Model, Types, type Query } from 'mongoose';
 
 import { MesaEstado } from '../mesas/schemas/mesa.schema.js';
 import { MesasService } from '../mesas/mesas.service.js';
@@ -21,6 +21,8 @@ import { OrdenCafeteria } from './schemas/orden-cafeteria.schema.js';
 import { OrdenEstado } from './schemas/orden-estado.enum.js';
 import { ItemEstado } from './schemas/item-estado.enum.js';
 import { TipoOrden } from './schemas/tipo-orden.enum.js';
+import { Temperatura } from '../productos/schemas/temperatura.enum.js';
+import { EVENTO_ORDEN_CREADA } from '../cocina/cocina.constants.js';
 import { CrearOrdenDto, CrearOrdenItemDto } from './dto/crear-orden.dto.js';
 import { OrdenCocinaResponse, OrdenCafeteriaResponse, OrdenResponse } from './interfaces/orden-response.interface.js';
 
@@ -37,22 +39,27 @@ interface GrupoItems {
   items: ItemProcesado[];
 }
 
-interface DocumentoOrdenPopulado {
+interface PopulatedItem {
+  _id: Types.ObjectId;
+  producto: { _id: Types.ObjectId; nombre: string; precio: number };
+  cantidad: number;
+  notas?: string;
+  estadoItem: ItemEstado;
+}
+
+interface PopulatedOrden {
   _id: Types.ObjectId;
   mesa: { _id: Types.ObjectId; numero: number };
   mesero: { _id: Types.ObjectId; nombre: string };
-  items: Array<{
-    _id: Types.ObjectId;
-    producto: { _id: Types.ObjectId; nombre: string; precio: number };
-    cantidad: number;
-    notas?: string;
-    estadoItem: ItemEstado;
-  }>;
+  items: PopulatedItem[];
   estadoGeneral: OrdenEstado;
   tipo: TipoOrden;
+  notaChef?: string;
+  tiempoEstimadoMin?: number;
+  temperatura?: Temperatura;
+  tamano?: string;
   createdAt: Date;
   updatedAt: Date;
-  toObject: () => Record<string, unknown>;
 }
 
 @Injectable()
@@ -66,6 +73,34 @@ export class OrdenesService {
     private readonly inventarioService: InventarioService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  private async _populateFind(
+    query: Query<OrdenDocument[], OrdenDocument>,
+  ): Promise<PopulatedOrden[]> {
+    const docs = await query
+      .populate('mesa', 'numero')
+      .populate('mesero', 'nombre')
+      .populate('items.producto', 'nombre precio')
+      .exec();
+
+    return docs.map(doc => doc.toObject() as unknown as PopulatedOrden);
+  }
+
+  private async _populateFindOne(
+    query: Query<OrdenDocument | null, OrdenDocument>,
+  ): Promise<PopulatedOrden | null> {
+    const doc = await query
+      .populate('mesa', 'numero')
+      .populate('mesero', 'nombre')
+      .populate('items.producto', 'nombre precio')
+      .exec();
+
+    if (!doc) {
+      return null;
+    }
+
+    return doc.toObject() as unknown as PopulatedOrden;
+  }
 
   async crearOrden(
     dto: CrearOrdenDto,
@@ -92,41 +127,36 @@ export class OrdenesService {
 
     const idsDocumentos = await this._crearDocumentos(grupos, dto.mesaId, meseroId);
 
-    const documentosPopulados = await this.ordenModel
-      .find({ _id: { $in: idsDocumentos } })
-      .populate('mesa', 'numero')
-      .populate('mesero', 'nombre')
-      .populate('items.producto', 'nombre precio')
-      .exec();
+    const ordenesPopuladas = await this._populateFind(
+      this.ordenModel.find({ _id: { $in: idsDocumentos } }),
+    );
 
-    this.eventEmitter.emit('orden.creada', {
-      ordenes: documentosPopulados.map(doc => doc.toObject()),
+    this.eventEmitter.emit(EVENTO_ORDEN_CREADA, {
+      ordenes: ordenesPopuladas,
       mesaId: dto.mesaId,
       timestamp: new Date(),
     });
 
-    return documentosPopulados.map(doc => this._toResponse(doc as unknown as DocumentoOrdenPopulado));
+    return ordenesPopuladas.map(orden => this._toResponse(orden));
   }
 
   async listarPorMesa(
     mesaId: string,
+    limite = 100,
   ): Promise<(OrdenCocinaResponse | OrdenCafeteriaResponse)[]> {
     this._validarObjectId(mesaId);
 
-    const ordenes = await this.ordenModel
-      .find({
-        mesa: new Types.ObjectId(mesaId),
-        estadoGeneral: { $ne: OrdenEstado.ENTREGADA },
-      })
-      .populate('mesa', 'numero')
-      .populate('mesero', 'nombre')
-      .populate('items.producto', 'nombre precio')
-      .sort({ createdAt: -1 })
-      .exec();
-
-    return ordenes.map(orden =>
-      this._toResponse(orden as unknown as DocumentoOrdenPopulado),
+    const ordenes = await this._populateFind(
+      this.ordenModel
+        .find({
+          mesa: new Types.ObjectId(mesaId),
+          estadoGeneral: { $ne: OrdenEstado.ENTREGADA },
+        })
+        .sort({ createdAt: -1 })
+        .limit(limite),
     );
+
+    return ordenes.map(orden => this._toResponse(orden));
   }
 
   async marcarOrdenEntregada(
@@ -154,84 +184,93 @@ export class OrdenesService {
 
     await orden.save();
 
-    const ordenPopulada = await this.ordenModel
-      .findById(orden._id)
-      .populate('mesa', 'numero')
-      .populate('mesero', 'nombre')
-      .populate('items.producto', 'nombre precio')
-      .exec();
+    const ordenPopulada = await this._populateFindOne(
+      this.ordenModel.findById(orden._id),
+    );
 
-    return this._toResponse(ordenPopulada as unknown as DocumentoOrdenPopulado);
+    if (!ordenPopulada) {
+      throw new NotFoundException(`Orden con id ${orden._id} no encontrada después de guardar`);
+    }
+
+    return this._toResponse(ordenPopulada);
   }
 
-  async obtenerColaCocina(): Promise<OrdenCocinaResponse[]> {
-    const ordenes = await this.ordenModel
-      .find({
-        tipo: TipoOrden.COCINA,
-        estadoGeneral: {
-          $in: [OrdenEstado.PENDIENTE, OrdenEstado.EN_PREPARACION],
-        },
-      })
-      .populate('mesa', 'numero')
-      .populate('mesero', 'nombre')
-      .populate('items.producto', 'nombre precio')
-      .sort({ createdAt: 1 })
-      .exec();
-
-    return ordenes.map(orden =>
-      this._toResponse(orden as unknown as DocumentoOrdenPopulado) as OrdenCocinaResponse,
+  async obtenerColaCocina(
+    limite = 100,
+  ): Promise<OrdenCocinaResponse[]> {
+    const ordenes = await this._populateFind(
+      this.ordenModel
+        .find({
+          tipo: TipoOrden.COCINA,
+          estadoGeneral: {
+            $in: [OrdenEstado.PENDIENTE, OrdenEstado.EN_PREPARACION],
+          },
+        })
+        .sort({ createdAt: 1 })
+        .limit(limite),
     );
+
+    return ordenes.map(orden => this._toResponse(orden) as OrdenCocinaResponse);
   }
 
   async marcarEnPreparacion(
     ordenId: string,
   ): Promise<OrdenCocinaResponse | OrdenCafeteriaResponse> {
-    const orden = await this._buscarOrdenPorId(ordenId);
-
-    if (orden.estadoGeneral !== OrdenEstado.PENDIENTE) {
-      throw new BadRequestException(
-        `La orden debe estar en estado PENDIENTE. Estado actual: ${orden.estadoGeneral}`,
-      );
-    }
-
-    orden.estadoGeneral = OrdenEstado.EN_PREPARACION;
-    await orden.save();
-
-    const ordenPopulada = await this.ordenModel
-      .findById(orden._id)
-      .populate('mesa', 'numero')
-      .populate('mesero', 'nombre')
-      .populate('items.producto', 'nombre precio')
-      .exec();
-
-    return this._toResponse(ordenPopulada as unknown as DocumentoOrdenPopulado);
+    return this._cambiarEstadoIndividual(ordenId, OrdenEstado.PENDIENTE, OrdenEstado.EN_PREPARACION);
   }
 
   async marcarLista(
     ordenId: string,
   ): Promise<OrdenCocinaResponse | OrdenCafeteriaResponse> {
+    return this._marcarLista(ordenId);
+  }
+
+  private async _cambiarEstadoIndividual(
+    ordenId: string,
+    estadoActualRequerido: OrdenEstado,
+    nuevoEstado: OrdenEstado,
+    actualizarItems?: (orden: OrdenDocument) => void,
+  ): Promise<OrdenCocinaResponse | OrdenCafeteriaResponse> {
     const orden = await this._buscarOrdenPorId(ordenId);
 
-    if (orden.estadoGeneral !== OrdenEstado.EN_PREPARACION) {
+    if (orden.estadoGeneral !== estadoActualRequerido) {
       throw new BadRequestException(
-        `La orden debe estar en estado EN_PREPARACION. Estado actual: ${orden.estadoGeneral}`,
+        `La orden debe estar en estado ${estadoActualRequerido}. Estado actual: ${orden.estadoGeneral}`,
       );
     }
 
-    orden.estadoGeneral = OrdenEstado.LISTA;
-    orden.items.forEach(item => {
-      item.estadoItem = ItemEstado.LISTO;
-    });
+    orden.estadoGeneral = nuevoEstado;
+
+    if (actualizarItems) {
+      actualizarItems(orden);
+    }
+
     await orden.save();
 
-    const ordenPopulada = await this.ordenModel
-      .findById(orden._id)
-      .populate('mesa', 'numero')
-      .populate('mesero', 'nombre')
-      .populate('items.producto', 'nombre precio')
-      .exec();
+    const ordenPopulada = await this._populateFindOne(
+      this.ordenModel.findById(orden._id),
+    );
 
-    return this._toResponse(ordenPopulada as unknown as DocumentoOrdenPopulado);
+    if (!ordenPopulada) {
+      throw new NotFoundException(`Orden con id ${orden._id} no encontrada después de guardar`);
+    }
+
+    return this._toResponse(ordenPopulada);
+  }
+
+  private async _marcarLista(
+    ordenId: string,
+  ): Promise<OrdenCocinaResponse | OrdenCafeteriaResponse> {
+    return this._cambiarEstadoIndividual(
+      ordenId,
+      OrdenEstado.EN_PREPARACION,
+      OrdenEstado.LISTA,
+      (orden) => {
+        orden.items.forEach(item => {
+          item.estadoItem = ItemEstado.LISTO;
+        });
+      },
+    );
   }
 
   async actualizarEstadoItem(
@@ -242,16 +281,10 @@ export class OrdenesService {
     this._validarObjectId(ordenId);
     this._validarObjectId(itemId);
 
-    const orden = await this.ordenModel.findById(ordenId).exec();
-
-    if (!orden) {
-      throw new NotFoundException(`Orden con id ${ordenId} no encontrada`);
-    }
+    const orden = await this._buscarOrdenPorId(ordenId);
 
     const itemObjectId = new Types.ObjectId(itemId);
-    const itemIndex = orden.items.findIndex(i =>
-      (i as unknown as { _id: Types.ObjectId })._id.equals(itemObjectId),
-    );
+    const itemIndex = orden.items.findIndex(i => i._id.equals(itemObjectId));
 
     if (itemIndex === -1) {
       throw new NotFoundException(`Item con id ${itemId} no encontrado en la orden`);
@@ -260,18 +293,19 @@ export class OrdenesService {
     orden.items[itemIndex].estadoItem = nuevoEstado;
     await orden.save();
 
-    const ordenPopulada = await this.ordenModel
-      .findById(ordenId)
-      .populate('mesa', 'numero')
-      .populate('mesero', 'nombre')
-      .populate('items.producto', 'nombre precio')
-      .exec();
+    const ordenPopulada = await this._populateFindOne(
+      this.ordenModel.findById(ordenId),
+    );
 
-    return this._toResponse(ordenPopulada as unknown as DocumentoOrdenPopulado);
+    if (!ordenPopulada) {
+      throw new NotFoundException(`Orden con id ${ordenId} no encontrada después de guardar`);
+    }
+
+    return this._toResponse(ordenPopulada);
   }
 
   private _toResponse(
-    doc: DocumentoOrdenPopulado,
+    doc: PopulatedOrden,
   ): OrdenCocinaResponse | OrdenCafeteriaResponse {
     const base: OrdenResponse = {
       id: doc._id.toString(),
@@ -298,19 +332,17 @@ export class OrdenesService {
     };
 
     if (doc.tipo === TipoOrden.COCINA) {
-      const cocinaDoc = doc as unknown as OrdenCocina & DocumentoOrdenPopulado;
       return {
         ...base,
-        notaChef: cocinaDoc.notaChef,
-        tiempoEstimadoMin: cocinaDoc.tiempoEstimadoMin,
+        notaChef: doc.notaChef,
+        tiempoEstimadoMin: doc.tiempoEstimadoMin,
       };
     }
 
-    const cafeteriaDoc = doc as unknown as OrdenCafeteria & DocumentoOrdenPopulado;
     return {
       ...base,
-      temperatura: cafeteriaDoc.temperatura,
-      tamano: cafeteriaDoc.tamano,
+      temperatura: doc.temperatura,
+      tamano: doc.tamano,
     };
   }
 
