@@ -154,17 +154,21 @@ export class OrdenesService {
   async listarPorMesa(
     mesaId: string,
     limite = 100,
+    desde?: Date,
   ): Promise<(OrdenCocinaResponse | OrdenCafeteriaResponse)[]> {
     this._validarObjectId(mesaId);
 
+    const filtro: Record<string, unknown> = {
+      mesa: new Types.ObjectId(mesaId),
+      estadoGeneral: { $ne: OrdenEstado.ENTREGADA },
+    };
+
+    if (desde) {
+      filtro.createdAt = { $gte: desde };
+    }
+
     const ordenes = await this._populateFind(
-      this.ordenModel
-        .find({
-          mesa: new Types.ObjectId(mesaId),
-          estadoGeneral: { $ne: OrdenEstado.ENTREGADA },
-        })
-        .sort({ createdAt: -1 })
-        .limit(limite),
+      this.ordenModel.find(filtro).sort({ createdAt: -1 }).limit(limite),
     );
 
     return ordenes.map((orden) => this._toResponse(orden));
@@ -329,16 +333,21 @@ export class OrdenesService {
 
   async listarEntregadasPorMesa(
     mesaId: string,
+    desde?: Date,
   ): Promise<(OrdenCocinaResponse | OrdenCafeteriaResponse)[]> {
     this._validarObjectId(mesaId);
 
+    const filtro: Record<string, unknown> = {
+      mesa: new Types.ObjectId(mesaId),
+      estadoGeneral: OrdenEstado.ENTREGADA,
+    };
+
+    if (desde) {
+      filtro.createdAt = { $gte: desde };
+    }
+
     const ordenes = await this._populateFind(
-      this.ordenModel
-        .find({
-          mesa: new Types.ObjectId(mesaId),
-          estadoGeneral: OrdenEstado.ENTREGADA,
-        })
-        .sort({ createdAt: -1 }),
+      this.ordenModel.find(filtro).sort({ createdAt: -1 }),
     );
 
     return ordenes.map((orden) => this._toResponse(orden));
