@@ -27,6 +27,12 @@ import type {
   ReporteDiario,
 } from './interfaces/factura-response.interface.js';
 
+const POPULATE_MESA = 'mesa';
+const POPULATE_CAJERO = 'cajero';
+const POPULATE_ANULADO_POR = 'anuladoPor';
+const CAMPOS_MESA = 'numero';
+const CAMPOS_USUARIO = 'nombre';
+
 @Injectable()
 export class CajaService {
   private readonly impuestoPorcentaje: number;
@@ -205,8 +211,8 @@ export class CajaService {
     // PASO 7 — Retornar la factura emitida
     const facturaPopulada = await this.facturaModel
       .findById(factura._id)
-      .populate('mesa', 'numero')
-      .populate('cajero', 'nombre')
+      .populate(POPULATE_MESA, CAMPOS_MESA)
+      .populate(POPULATE_CAJERO, CAMPOS_USUARIO)
       .exec();
 
     if (!facturaPopulada) {
@@ -221,9 +227,9 @@ export class CajaService {
 
     const factura = await this.facturaModel
       .findById(id)
-      .populate('mesa', 'numero')
-      .populate('cajero', 'nombre')
-      .populate('anuladoPor', 'nombre')
+      .populate(POPULATE_MESA, CAMPOS_MESA)
+      .populate(POPULATE_CAJERO, CAMPOS_USUARIO)
+      .populate(POPULATE_ANULADO_POR, CAMPOS_USUARIO)
       .exec();
 
     if (!factura) {
@@ -243,9 +249,9 @@ export class CajaService {
 
     const factura = await this.facturaModel
       .findById(id)
-      .populate('mesa', 'numero')
-      .populate('cajero', 'nombre')
-      .populate('anuladoPor', 'nombre')
+      .populate(POPULATE_MESA, CAMPOS_MESA)
+      .populate(POPULATE_CAJERO, CAMPOS_USUARIO)
+      .populate(POPULATE_ANULADO_POR, CAMPOS_USUARIO)
       .exec();
 
     if (!factura) {
