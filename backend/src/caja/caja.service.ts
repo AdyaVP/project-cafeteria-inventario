@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
@@ -28,8 +27,6 @@ import type {
   ReporteDiario,
 } from './interfaces/factura-response.interface.js';
 
-const EVENTO_FACTURA_CREADA = 'factura.creada';
-
 @Injectable()
 export class CajaService {
   private readonly impuestoPorcentaje: number;
@@ -40,7 +37,6 @@ export class CajaService {
     private readonly configService: ConfigService,
     private readonly mesasService: MesasService,
     private readonly ordenesService: OrdenesService,
-    private readonly eventEmitter: EventEmitter2,
   ) {
     const impuesto = Number(
       this.configService.get<string>('IMPUESTO_PORCENTAJE'),
@@ -202,23 +198,9 @@ export class CajaService {
       fechaEmision: new Date(),
     });
 
-    // PASO 5 — Cerrar la mesa (queda LIBRE)
+    // PASO 5 — Cerrar la mesa (queda LIBRE). MesasService.cerrarMesa
+    // emite internamente el evento mesa.estado.cambiado (Fase 3)
     await this.mesasService.cerrarMesa(dto.mesaId);
-
-    // PASO 6 — Emitir evento para que el WebSocket actualice el canvas
-    this.eventEmitter.emit('mesa.estado.cambiado', {
-      mesaId: dto.mesaId,
-      nuevoEstado: MesaEstado.LIBRE,
-      timestamp: new Date(),
-    });
-
-    this.eventEmitter.emit(EVENTO_FACTURA_CREADA, {
-      facturaId: factura._id.toString(),
-      total,
-      mesaId: dto.mesaId,
-      metodoPago: dto.metodoPago,
-      timestamp: new Date(),
-    });
 
     // PASO 7 — Retornar la factura emitida
     const facturaPopulada = await this.facturaModel

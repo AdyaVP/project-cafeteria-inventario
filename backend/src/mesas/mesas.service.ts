@@ -215,45 +215,6 @@ export class MesasService {
     return this._toResponse(mesaPopulada as unknown as MesaDocumentoPopulado);
   }
 
-  async cerrarMesaAtomicamente(mesaId: string): Promise<void> {
-    this._validarObjectId(mesaId);
-
-    const resultado = await this.mesaModel
-      .findOneAndUpdate(
-        {
-          _id: new mongoose.Types.ObjectId(mesaId),
-          estado: MesaEstado.CUENTA_PEDIDA,
-        },
-        {
-          $set: {
-            estado: MesaEstado.LIBRE,
-            meseroActual: null,
-            abiertaEn: null,
-            cerradaEn: new Date(),
-          },
-        },
-        { new: false },
-      )
-      .exec();
-
-    if (!resultado) {
-      const existente = await this.mesaModel.findById(mesaId).exec();
-
-      if (!existente) {
-        throw new NotFoundException(`Mesa con id ${mesaId} no encontrada`);
-      }
-
-      throw new BadRequestException(
-        `Transición inválida: la mesa debe estar en estado ${MesaEstado.CUENTA_PEDIDA} para cerrarse. Estado actual: ${existente.estado}`,
-      );
-    }
-
-    this.eventEmitter.emit('mesa.estado.cambiado', {
-      mesaId: resultado._id.toString(),
-      nuevoEstado: MesaEstado.LIBRE,
-      timestamp: new Date(),
-    });
-  }
   private _validarTransicion(
     estadoActual: MesaEstado,
     estadoDestino: MesaEstado,

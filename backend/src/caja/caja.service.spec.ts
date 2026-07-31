@@ -12,7 +12,6 @@ jest.mock('../ordenes/ordenes.service', () => ({
   })),
 }));
 
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -88,7 +87,6 @@ describe('CajaService', () => {
   let mockMesasService: Record<string, jest.Mock>;
   let mockOrdenesService: Record<string, jest.Mock>;
   let mockConfigService: Record<string, jest.Mock>;
-  let mockEventEmitter: Record<string, jest.Mock>;
   let facturaModel: Record<string, jest.Mock>;
 
   const defaultConfig: Record<string, unknown> = {
@@ -102,7 +100,6 @@ describe('CajaService', () => {
       listarPorMesa: jest.fn().mockResolvedValue([]),
     };
     mockConfigService = { get: jest.fn((key: string) => defaultConfig[key]) };
-    mockEventEmitter = { emit: jest.fn() };
     facturaModel = {
       create: jest.fn(),
       find: jest.fn(),
@@ -119,7 +116,6 @@ describe('CajaService', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: MesasService, useValue: mockMesasService },
         { provide: OrdenesService, useValue: mockOrdenesService },
-        { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
     }).compile();
 
@@ -275,10 +271,6 @@ describe('CajaService', () => {
         }),
       );
       expect(mockMesasService.cerrarMesa).toHaveBeenCalledWith(MESA_ID);
-      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
-        'mesa.estado.cambiado',
-        expect.objectContaining({ mesaId: MESA_ID }),
-      );
     });
 
     it('lanza error con ObjectId invalido', async () => {
