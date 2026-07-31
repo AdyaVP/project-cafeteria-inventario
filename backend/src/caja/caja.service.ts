@@ -4,10 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 
-import { MesaEstado } from '../mesas/schemas/mesa.schema.js';
+import { Mesa, MesaDocument, MesaEstado } from '../mesas/schemas/mesa.schema.js';
 import { MesasService } from '../mesas/mesas.service.js';
 import { OrdenesService } from '../ordenes/ordenes.service.js';
 
@@ -40,9 +41,12 @@ export class CajaService {
   constructor(
     @InjectModel(Factura.name)
     private readonly facturaModel: Model<FacturaDocument>,
+    @InjectModel(Mesa.name)
+    private readonly mesaModel: Model<MesaDocument>,
     private readonly configService: ConfigService,
     private readonly mesasService: MesasService,
     private readonly ordenesService: OrdenesService,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     const impuesto = Number(
       this.configService.get<string>('IMPUESTO_PORCENTAJE'),
@@ -82,6 +86,7 @@ export class CajaService {
 
     const ordenes = await this.ordenesService.listarEntregadasPorMesa(
       mesaId,
+      100,
       desde,
     );
 
@@ -156,6 +161,7 @@ export class CajaService {
 
     const ordenes = await this.ordenesService.listarEntregadasPorMesa(
       dto.mesaId,
+      100,
       desde,
     );
 
@@ -188,38 +194,88 @@ export class CajaService {
     const impuesto = this._round(subtotal * (this.impuestoPorcentaje / 100));
     const total = this._round(subtotal + impuesto);
 
-    // PASO 4 — Crear el documento de factura con estado PAGADA
-    const factura = await this.facturaModel.create({
-      mesa: new Types.ObjectId(dto.mesaId),
-      ordenes: ordenes.map((o) => new Types.ObjectId(o.id)),
-      itemsSnapshot,
-      subtotal,
-      impuesto,
-      total,
-      metodoPago: dto.metodoPago,
-      estado: FacturaEstado.PAGADA,
-      cajero: new Types.ObjectId(cajeroId),
-      cai: dto.cai,
-      rtn: dto.rtn,
-      fechaEmision: new Date(),
+    // PASO 4 + PASO 5 — Facturar y cerrar mesa en una transacción
+    const session = await this.facturaModel.db.startSession();
+    let facturaId = '';
+
+    try {
+      await session.withTransaction(async () => {
+        const [facturaCreada] = await this.facturaModel.create(
+          [
+            {
+              mesa: new Types.ObjectId(dto.mesaId),
+              ordenes: ordenes.map((o) => new Types.ObjectId(o.id)),
+              itemsSnapshot,
+              subtotal,
+              impuesto,
+              total,
+              metodoPago: dto.metodoPago,
+              estado: FacturaEstado.PAGADA,
+              cajero: new Types.ObjectId(cajeroId),
+              cai: dto.cai,
+              rtn: dto.rtn,
+              fechaEmision: new Date(),
+            },
+          ],
+          { session },
+        );
+
+        facturaId = facturaCreada._id.toString();
+
+        const mesaActualizada = await this.mesaModel
+          .findOneAndUpdate(
+            {
+              _id: new Types.ObjectId(dto.mesaId),
+              estado: MesaEstado.CUENTA_PEDIDA,
+            },
+            {
+              $set: {
+                estado: MesaEstado.LIBRE,
+                meseroActual: null,
+                abiertaEn: null,
+                cerradaEn: new Date(),
+              },
+            },
+            { session, new: true },
+          )
+          .exec();
+
+        if (!mesaActualizada) {
+          throw new BadRequestException(
+            'No se pudo cerrar la mesa durante la emisión de factura',
+          );
+        }
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    if (!facturaId) {
+      throw new NotFoundException(
+        'No se pudo recuperar la factura recién emitida',
+      );
+    }
+
+    this.eventEmitter.emit('mesa.estado.cambiado', {
+      mesaId: dto.mesaId,
+      nuevoEstado: MesaEstado.LIBRE,
+      timestamp: new Date(),
     });
 
-    // PASO 5 — Cerrar la mesa (queda LIBRE)
-    await this.mesasService.cerrarMesa(dto.mesaId);
-
     // PASO 6 — Emitir evento mesa.estado.cambiado para que el WebSocket
-    // actualice el canvas del mesero. El evento lo emite MesasService.cerrarMesa
-    // internamente (Fase 3 del plan): se emite una sola vez, sin duplicación.
+    // actualice el canvas del mesero.
 
     // PASO 7 — Retornar la factura emitida
     const facturaPopulada = await this.facturaModel
-      .findById(factura._id)
+      .findById(facturaId)
       .populate(POPULATE_MESA, CAMPOS_MESA)
       .populate(POPULATE_CAJERO, CAMPOS_USUARIO)
       .exec();
 
     if (!facturaPopulada) {
-      return this._toResponse(factura);
+      throw new NotFoundException(
+        `Factura con id ${facturaId} no encontrada después de guardar`,
+      );
     }
 
     return this._toResponse(facturaPopulada);
@@ -271,7 +327,20 @@ export class CajaService {
 
     await factura.save();
 
-    return this._toResponse(factura);
+    const facturaActualizada = await this.facturaModel
+      .findById(id)
+      .populate(POPULATE_MESA, CAMPOS_MESA)
+      .populate(POPULATE_CAJERO, CAMPOS_USUARIO)
+      .populate(POPULATE_ANULADO_POR, CAMPOS_USUARIO)
+      .exec();
+
+    if (!facturaActualizada) {
+      throw new NotFoundException(
+        `Factura con id ${id} no encontrada después de anular`,
+      );
+    }
+
+    return this._toResponse(facturaActualizada);
   }
 
   async reporteDiario(fecha?: string): Promise<ReporteDiario> {

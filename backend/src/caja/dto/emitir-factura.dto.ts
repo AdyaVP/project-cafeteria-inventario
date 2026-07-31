@@ -5,14 +5,9 @@ import { MetodoPago } from '../schemas/factura.schema.js';
 export const EmitirFacturaSchema = z.object({
   mesaId: z.string().min(1, 'El ID de la mesa es requerido'),
 
-  metodoPago: z.enum(
-    [
-      MetodoPago.EFECTIVO,
-      MetodoPago.TARJETA,
-      MetodoPago.TRANSFERENCIA,
-    ] as const,
-    { error: 'El método de pago es requerido' },
-  ),
+  metodoPago: z.nativeEnum(MetodoPago, {
+    error: 'El método de pago es requerido',
+  }),
 
   rtn: z
     .string()

@@ -15,10 +15,12 @@ jest.mock('../ordenes/ordenes.service', () => ({
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 
 import { MesasService } from '../mesas/mesas.service';
+import { Mesa } from '../mesas/schemas/mesa.schema';
 import { MesaEstado } from '../mesas/schemas/mesa.schema';
 import { OrdenesService } from '../ordenes/ordenes.service';
 
@@ -82,12 +84,21 @@ function ordenEntregada() {
   };
 }
 
+function mockFindByIdResult(resultado: unknown) {
+  return {
+    populate: jest.fn().mockReturnThis(),
+    exec: jest.fn().mockResolvedValue(resultado),
+  };
+}
+
 describe('CajaService', () => {
   let service: CajaService;
   let mockMesasService: Record<string, jest.Mock>;
   let mockOrdenesService: Record<string, jest.Mock>;
   let mockConfigService: Record<string, jest.Mock>;
+  let mockEventEmitter: Record<string, jest.Mock>;
   let facturaModel: Record<string, jest.Mock>;
+  let mesaModel: Record<string, jest.Mock>;
 
   const defaultConfig: Record<string, unknown> = {
     IMPUESTO_PORCENTAJE: '15',
@@ -100,11 +111,16 @@ describe('CajaService', () => {
       listarPorMesa: jest.fn().mockResolvedValue([]),
     };
     mockConfigService = { get: jest.fn((key: string) => defaultConfig[key]) };
+    mockEventEmitter = { emit: jest.fn() };
     facturaModel = {
       create: jest.fn(),
       find: jest.fn(),
       findById: jest.fn(),
       countDocuments: jest.fn(),
+      db: { startSession: jest.fn() },
+    };
+    mesaModel = {
+      findOneAndUpdate: jest.fn(),
     };
   }
 
@@ -113,9 +129,11 @@ describe('CajaService', () => {
       providers: [
         CajaService,
         { provide: getModelToken(Factura.name), useValue: facturaModel },
+        { provide: getModelToken(Mesa.name), useValue: mesaModel },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: MesasService, useValue: mockMesasService },
         { provide: OrdenesService, useValue: mockOrdenesService },
+        { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
     }).compile();
 
@@ -210,6 +228,7 @@ describe('CajaService', () => {
 
       expect(mockOrdenesService.listarEntregadasPorMesa).toHaveBeenCalledWith(
         MESA_ID,
+        100,
         apertura,
       );
       expect(mockOrdenesService.listarPorMesa).toHaveBeenCalledWith(
@@ -236,14 +255,18 @@ describe('CajaService', () => {
       mockOrdenesService.listarEntregadasPorMesa.mockResolvedValue([
         ordenEntregada(),
       ]);
-      mockMesasService.cerrarMesa.mockResolvedValue(undefined);
 
       const doc = mockFacturaDoc();
-      facturaModel.create.mockResolvedValue(doc);
-      facturaModel.findById = jest.fn().mockReturnValue({
-        populate: jest.fn().mockReturnThis(),
-        exec: jest.fn().mockResolvedValue(doc),
+      const session = {
+        withTransaction: jest.fn(async (fn: () => Promise<void>) => fn()),
+        endSession: jest.fn().mockResolvedValue(undefined),
+      };
+      facturaModel.db.startSession.mockResolvedValue(session);
+      facturaModel.create.mockResolvedValue([doc]);
+      mesaModel.findOneAndUpdate.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(MESA_ID) }),
       });
+      facturaModel.findById = jest.fn().mockReturnValue(mockFindByIdResult(doc));
 
       const r = await service.emitirFactura(CAJERO_ID, {
         mesaId: MESA_ID,
@@ -256,21 +279,47 @@ describe('CajaService', () => {
       expect(r.estado).toBe(FacturaEstado.PAGADA);
 
       expect(facturaModel.create).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({
+            itemsSnapshot: [
+              {
+                nombre: 'Hamburguesa',
+                cantidad: 2,
+                precioUnitario: 100,
+                subtotal: 200,
+              },
+            ],
+            impuesto: 30,
+            total: 230,
+            estado: FacturaEstado.PAGADA,
+          }),
+        ],
+        expect.objectContaining({ session }),
+      );
+      expect(mesaModel.findOneAndUpdate).toHaveBeenCalledWith(
+        {
+          _id: expect.any(Types.ObjectId),
+          estado: MesaEstado.CUENTA_PEDIDA,
+        },
+        {
+          $set: expect.objectContaining({
+            estado: MesaEstado.LIBRE,
+            meseroActual: null,
+            abiertaEn: null,
+          }),
+        },
         expect.objectContaining({
-          itemsSnapshot: [
-            {
-              nombre: 'Hamburguesa',
-              cantidad: 2,
-              precioUnitario: 100,
-              subtotal: 200,
-            },
-          ],
-          impuesto: 30,
-          total: 230,
-          estado: FacturaEstado.PAGADA,
+          session,
+          new: true,
         }),
       );
-      expect(mockMesasService.cerrarMesa).toHaveBeenCalledWith(MESA_ID);
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        'mesa.estado.cambiado',
+        expect.objectContaining({
+          mesaId: MESA_ID,
+          nuevoEstado: MesaEstado.LIBRE,
+        }),
+      );
     });
 
     it('lanza error con ObjectId invalido', async () => {
@@ -326,10 +375,19 @@ describe('CajaService', () => {
 
     it('anula factura y registra quien anulo', async () => {
       const doc = mockFacturaDoc();
-      facturaModel.findById = jest.fn().mockReturnValue({
-        populate: jest.fn().mockReturnThis(),
-        exec: jest.fn().mockResolvedValue(doc),
+      const docActualizado = mockFacturaDoc({
+        estado: FacturaEstado.ANULADA,
+        justificacionAnulacion:
+          'Error en el cobro, el cliente no consumió los productos',
+        anuladoPor: {
+          _id: new Types.ObjectId(CAJERO_ID),
+          nombre: 'Admin Test',
+        },
       });
+      facturaModel.findById = jest
+        .fn()
+        .mockReturnValueOnce(mockFindByIdResult(doc))
+        .mockReturnValueOnce(mockFindByIdResult(docActualizado));
 
       const r = await service.anularFactura(
         FACTURA_ID,
@@ -342,6 +400,7 @@ describe('CajaService', () => {
         'Error en el cobro, el cliente no consumió los productos',
       );
       expect(String(doc.anuladoPor)).toBe(CAJERO_ID);
+      expect(r.anuladoPor?.id).toBe(CAJERO_ID);
     });
 
     it('lanza error si la factura ya esta anulada', async () => {

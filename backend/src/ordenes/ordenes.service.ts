@@ -333,6 +333,7 @@ export class OrdenesService {
 
   async listarEntregadasPorMesa(
     mesaId: string,
+    limite = 100,
     desde?: Date,
   ): Promise<(OrdenCocinaResponse | OrdenCafeteriaResponse)[]> {
     this._validarObjectId(mesaId);
@@ -347,7 +348,7 @@ export class OrdenesService {
     }
 
     const ordenes = await this._populateFind(
-      this.ordenModel.find(filtro).sort({ createdAt: -1 }),
+      this.ordenModel.find(filtro).sort({ createdAt: -1 }).limit(limite),
     );
 
     return ordenes.map((orden) => this._toResponse(orden));

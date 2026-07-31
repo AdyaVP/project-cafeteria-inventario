@@ -10,6 +10,7 @@ const requiredEnvVars = [
   'JWT_SECRET',
   'PORT',
   'FRONTEND_URL',
+  'IMPUESTO_PORCENTAJE',
 ] as const;
 
 function validateEnv(): void {
