@@ -27,6 +27,7 @@ export interface CuentaPendienteResponse {
   totalGravado18: number;
   isv15: number;
   isv18: number;
+  total: number;
 }
 
 export interface FacturaResponse {

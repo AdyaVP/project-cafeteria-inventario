@@ -91,10 +91,12 @@ export class CajaController {
   async listarFacturas(
     @Query('pagina') pagina?: string,
     @Query('limite') limite?: string,
+    @Query('mesaId') mesaId?: string,
   ): Promise<PaginatedResponse<FacturaResponse>> {
     return this.cajaService.listarFacturas(
       pagina ? Number(pagina) : 1,
       limite ? Number(limite) : 20,
+      mesaId,
     );
   }
 
