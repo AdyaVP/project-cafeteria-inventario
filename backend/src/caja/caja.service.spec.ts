@@ -11,6 +11,7 @@ jest.mock('../mesas/mesas.service', () => ({
 jest.mock('../ordenes/ordenes.service', () => ({
   OrdenesService: jest.fn().mockImplementation(() => ({
     listarEntregadasPorMesa: jest.fn(),
+    listarPorMesa: jest.fn(),
   })),
 }));
 
@@ -139,7 +140,10 @@ describe('CajaService', () => {
       abrirMesa: jest.fn(),
       solicitarCuenta: jest.fn(),
     };
-    mockOrdenesService = { listarEntregadasPorMesa: jest.fn() };
+    mockOrdenesService = {
+      listarEntregadasPorMesa: jest.fn(),
+      listarPorMesa: jest.fn().mockResolvedValue([]),
+    };
     mockProductosService = { buscarPorId: jest.fn(), buscarVarios: jest.fn() };
     mockConfigService = { get: jest.fn((key: string) => defaultConfig[key]) };
     mockEventEmitter = { emit: jest.fn() };
@@ -434,6 +438,136 @@ describe('CajaService', () => {
       await expect(service.obtenerCuenta(MESA_ID)).rejects.toThrow(
         BadRequestException,
       );
+    });
+
+    it('lanza error si hay ordenes sin entregar en la mesa', async () => {
+      mockMesasService.buscarPorId.mockResolvedValue({
+        id: MESA_ID,
+        numero: 5,
+        estado: MesaEstado.CUENTA_PEDIDA,
+        meseroActual: { id: MESERO_ID, nombre: 'Test' },
+      });
+      mockOrdenesService.listarEntregadasPorMesa.mockResolvedValue([
+        {
+          id: new Types.ObjectId().toHexString(),
+          items: [
+            {
+              productoId: PRODUCTO_ID,
+              nombreProducto: 'Hamburguesa',
+              precioUnitario: 100,
+              cantidad: 2,
+            },
+          ],
+        },
+      ]);
+      mockProductosService.buscarVarios.mockResolvedValue(
+        new Map([[PRODUCTO_ID, { tipoIsv: TipoIsv.GRAVADO_15 }]]),
+      );
+      mockOrdenesService.listarPorMesa.mockResolvedValue([
+        { id: new Types.ObjectId().toHexString() },
+      ]);
+
+      await expect(service.obtenerCuenta(MESA_ID)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('retorna total en la cuenta pendiente', async () => {
+      mockMesasService.buscarPorId.mockResolvedValue({
+        id: MESA_ID,
+        numero: 5,
+        estado: MesaEstado.CUENTA_PEDIDA,
+        meseroActual: { id: MESERO_ID, nombre: 'Test' },
+      });
+      mockOrdenesService.listarEntregadasPorMesa.mockResolvedValue([
+        {
+          id: new Types.ObjectId().toHexString(),
+          items: [
+            {
+              productoId: PRODUCTO_ID,
+              nombreProducto: 'Hamburguesa',
+              precioUnitario: 100,
+              cantidad: 2,
+            },
+          ],
+        },
+      ]);
+      mockProductosService.buscarVarios.mockResolvedValue(
+        new Map([[PRODUCTO_ID, { tipoIsv: TipoIsv.GRAVADO_15 }]]),
+      );
+
+      const r = await service.obtenerCuenta(MESA_ID);
+      expect(r.total).toBe(230);
+    });
+
+    it('filtra ordenes por la sesion actual de la mesa (abiertaEn)', async () => {
+      const apertura = new Date('2026-07-30T08:00:00-06:00');
+
+      mockMesasService.buscarPorId.mockResolvedValue({
+        id: MESA_ID,
+        numero: 5,
+        estado: MesaEstado.CUENTA_PEDIDA,
+        meseroActual: { id: MESERO_ID, nombre: 'Test' },
+        abiertaEn: apertura,
+      });
+      mockOrdenesService.listarEntregadasPorMesa.mockResolvedValue([
+        {
+          id: new Types.ObjectId().toHexString(),
+          items: [
+            {
+              productoId: PRODUCTO_ID,
+              nombreProducto: 'Hamburguesa',
+              precioUnitario: 100,
+              cantidad: 2,
+            },
+          ],
+        },
+      ]);
+      mockProductosService.buscarVarios.mockResolvedValue(
+        new Map([[PRODUCTO_ID, { tipoIsv: TipoIsv.GRAVADO_15 }]]),
+      );
+
+      await service.obtenerCuenta(MESA_ID);
+
+      expect(mockOrdenesService.listarEntregadasPorMesa).toHaveBeenCalledWith(
+        MESA_ID,
+        apertura,
+      );
+      expect(mockOrdenesService.listarPorMesa).toHaveBeenCalledWith(
+        MESA_ID,
+        100,
+        apertura,
+      );
+    });
+
+    it('factura con tipoIsv por defecto si el producto fue eliminado', async () => {
+      mockMesasService.buscarPorId.mockResolvedValue({
+        id: MESA_ID,
+        numero: 5,
+        estado: MesaEstado.CUENTA_PEDIDA,
+        meseroActual: { id: MESERO_ID, nombre: 'Test' },
+      });
+      mockOrdenesService.listarEntregadasPorMesa.mockResolvedValue([
+        {
+          id: new Types.ObjectId().toHexString(),
+          items: [
+            {
+              productoId: PRODUCTO_ID,
+              nombreProducto: 'Producto Borrado',
+              precioUnitario: 100,
+              cantidad: 2,
+            },
+          ],
+        },
+      ]);
+      mockProductosService.buscarVarios.mockRejectedValue(
+        new NotFoundException('Productos no encontrados'),
+      );
+
+      const r = await service.obtenerCuenta(MESA_ID);
+      expect(r.items[0].tipoIsv).toBe(TipoIsv.GRAVADO_15);
+      expect(r.items[0].nombreProducto).toBe('Producto Borrado');
+      expect(r.total).toBe(230);
     });
 
     it('maneja items exentos y gravados 18%', async () => {
@@ -1157,6 +1291,34 @@ describe('CajaService', () => {
       expect(r.totalPaginas).toBe(1);
     });
 
+    it('filtra por mesaId cuando se provee', async () => {
+      facturaModel.find = jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([mockFacturaDoc()]),
+      });
+      facturaModel.countDocuments = jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(1) });
+
+      await service.listarFacturas(1, 20, MESA_ID);
+
+      expect(facturaModel.find).toHaveBeenCalledWith({
+        mesa: new Types.ObjectId(MESA_ID),
+      });
+      expect(facturaModel.countDocuments).toHaveBeenCalledWith({
+        mesa: new Types.ObjectId(MESA_ID),
+      });
+    });
+
+    it('lanza error si mesaId es invalido', async () => {
+      await expect(
+        service.listarFacturas(1, 20, 'id-invalido'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('retorna lista vacia', async () => {
       facturaModel.find = jest.fn().mockReturnValue({
         populate: jest.fn().mockReturnThis(),
@@ -1329,7 +1491,10 @@ describe('CajaService', () => {
 
       const r = await service.reporteDiario();
       expect(r.totalFacturado).toBe(250);
-      expect(r.desglosePorCajero).toHaveLength(0);
+      // El total se agrupa bajo la etiqueta de cajero eliminado
+      expect(r.desglosePorCajero).toHaveLength(1);
+      expect(r.desglosePorCajero[0].cajeroNombre).toBe('Cajero eliminado');
+      expect(r.desglosePorCajero[0].total).toBe(250);
     });
 
     it('lanza error con fecha que no existe en el calendario', async () => {
