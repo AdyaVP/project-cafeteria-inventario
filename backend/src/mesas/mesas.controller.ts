@@ -66,4 +66,10 @@ export class MesasController {
   async solicitarCuenta(@Param('id') mesaId: string): Promise<MesaResponse> {
     return this.mesasService.solicitarCuenta(mesaId);
   }
+
+  @Patch(':id/cerrar')
+  @Roles(Role.ADMIN, Role.CAJERO)
+  async cerrarMesa(@Param('id') mesaId: string): Promise<MesaResponse> {
+    return this.mesasService.cerrarMesa(mesaId);
+  }
 }
