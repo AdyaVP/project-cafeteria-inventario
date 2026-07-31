@@ -57,8 +57,12 @@ export class CajaService {
     private readonly productosService: ProductosService,
     private readonly eventEmitter: EventEmitter2,
   ) {
-    this.isvTasa15 = this.configService.get<number>('ISV_TASA_15') ?? 0.15;
-    this.isvTasa18 = this.configService.get<number>('ISV_TASA_18') ?? 0.18;
+    const tasa15 = Number(this.configService.get<string>('ISV_TASA_15'));
+    const tasa18 = Number(this.configService.get<string>('ISV_TASA_18'));
+
+    // Las variables de env llegan como string: se validan antes de usar
+    this.isvTasa15 = Number.isFinite(tasa15) && tasa15 > 0 ? tasa15 : 0.15;
+    this.isvTasa18 = Number.isFinite(tasa18) && tasa18 > 0 ? tasa18 : 0.18;
   }
 
   async abrirCaja(
@@ -83,7 +87,7 @@ export class CajaService {
     const corteCreado = await this.corteModel
       .create({
         cajero: new Types.ObjectId(cajeroId),
-        fondoInicial,
+        fondoInicial: this._round(fondoInicial),
         estado: CorteEstado.ABIERTO,
         aperturaEn: new Date(),
       })
@@ -152,13 +156,15 @@ export class CajaService {
         totalTransferencia += f.total;
     }
 
-    corte.totalEsperado = totalEsperado + corte.fondoInicial;
-    corte.totalReal = totalReal;
-    corte.diferencia = totalReal - (totalEsperado + corte.fondoInicial);
-    corte.totalEfectivo = totalEfectivo;
-    corte.totalTarjeta = totalTarjeta;
-    corte.totalTransferencia = totalTransferencia;
-    corte.totalPropinas = totalPropinas;
+    corte.totalEsperado = this._round(totalEsperado + corte.fondoInicial);
+    corte.totalReal = this._round(totalReal);
+    corte.diferencia = this._round(
+      totalReal - (totalEsperado + corte.fondoInicial),
+    );
+    corte.totalEfectivo = this._round(totalEfectivo);
+    corte.totalTarjeta = this._round(totalTarjeta);
+    corte.totalTransferencia = this._round(totalTransferencia);
+    corte.totalPropinas = this._round(totalPropinas);
     corte.cantidadFacturas = facturas.length;
     corte.estado = CorteEstado.CERRADO;
     corte.cierreEn = new Date();
@@ -170,6 +176,10 @@ export class CajaService {
       .populate('cajero', 'nombre')
       .lean()
       .exec();
+
+    if (!cortePopulado) {
+      throw new NotFoundException('Corte no encontrado después de cerrar');
+    }
 
     return this._corteToResponse(cortePopulado);
   }
@@ -227,8 +237,10 @@ export class CajaService {
 
     const cuenta = await this.obtenerCuenta(mesaId);
 
-    const propina = dto.propina ?? 0;
-    const total = cuenta.subtotal + cuenta.isv15 + cuenta.isv18 + propina;
+    const propina = this._round(dto.propina ?? 0);
+    const total = this._round(
+      cuenta.subtotal + cuenta.isv15 + cuenta.isv18 + propina,
+    );
 
     let montoRecibido = 0;
     let cambio = 0;
@@ -248,17 +260,19 @@ export class CajaService {
         );
       }
 
-      cambio = montoRecibido - total;
+      cambio = this._round(montoRecibido - total);
     }
 
-    await this.mesasService.cerrarMesaAtomicamente(mesaId);
-
+    // El correlativo se genera ANTES de cerrar la mesa: si falla
+    // (rango agotado), la mesa queda intacta en CUENTA_PEDIDA
     const correlativo = await this._generarCorrelativo();
     const numeroFactura = this._formatearNumeroFactura(correlativo);
     const comercioNombre =
       this.configService.get<string>('COMERCIO_NOMBRE') ?? '';
     const comercioRtn = this.configService.get<string>('COMERCIO_RTN') ?? '';
     const cai = this.configService.get<string>('COMERCIO_CAI') ?? '';
+
+    await this.mesasService.cerrarMesaAtomicamente(mesaId);
 
     let factura: FacturaDocument;
 
@@ -323,8 +337,11 @@ export class CajaService {
       .populate('cajero', 'nombre')
       .exec();
 
+    // Si el populate falla, se devuelve la factura sin referencias
+    // pobladas en vez de un 404 que llevaría al cajero a reintentar
+    // y duplicar el cobro.
     if (!facturaPopulada) {
-      throw new NotFoundException('Factura no encontrada después de crear');
+      return this._toResponse(factura);
     }
 
     return this._toResponse(facturaPopulada);
@@ -467,7 +484,12 @@ export class CajaService {
       const cajero = f.cajero as unknown as {
         _id: Types.ObjectId;
         nombre: string;
-      };
+      } | null;
+
+      if (!cajero) {
+        continue;
+      }
+
       const id = cajero._id.toString();
       const existente = mapaCajero.get(id) ?? {
         nombre: cajero.nombre,
@@ -551,7 +573,7 @@ export class CajaService {
           nombreProducto: item.nombreProducto,
           cantidad: item.cantidad,
           precioUnitario: item.precioUnitario,
-          subtotal: item.precioUnitario * item.cantidad,
+          subtotal: this._round(item.precioUnitario * item.cantidad),
         });
 
         idsUnicos.add(item.productoId);
@@ -598,6 +620,10 @@ export class CajaService {
 
     isv15 = this._round(isv15);
     isv18 = this._round(isv18);
+    subtotal = this._round(subtotal);
+    totalExento = this._round(totalExento);
+    totalGravado15 = this._round(totalGravado15);
+    totalGravado18 = this._round(totalGravado18);
 
     if (!mesa.meseroActual) {
       throw new BadRequestException(
@@ -623,38 +649,98 @@ export class CajaService {
     return Math.round((valor + Number.EPSILON) * 100) / 100;
   }
 
+  private _esErrorDeTipo(error: unknown): boolean {
+    const mensaje = (error as { message?: string })?.message ?? '';
+    return (
+      mensaje.toLowerCase().includes('non-numeric') ||
+      mensaje.toLowerCase().includes('cannot apply $inc')
+    );
+  }
+
   private async _generarCorrelativo(): Promise<number> {
-    const rangoInicial = this.configService.get<number>(
-      'COMERCIO_RANGO_INICIAL',
-      1,
+    const rangoInicial = Number(
+      this.configService.get<string>('COMERCIO_RANGO_INICIAL'),
     );
-    const rangoFinal = this.configService.get<number>(
-      'COMERCIO_RANGO_FINAL',
-      100000,
+    const rangoFinal = Number(
+      this.configService.get<string>('COMERCIO_RANGO_FINAL'),
     );
 
-    const actual = await this.counterModel
-      .findOneAndUpdate(
-        { nombre: 'factura' },
-        { $inc: { secuencial: 1 } },
-        { new: true, upsert: true },
-      )
-      .exec();
+    // Env llega como string: solo usar valores numéricos válidos
+    const ini =
+      Number.isFinite(rangoInicial) && rangoInicial > 0 ? rangoInicial : 1;
+    const fin =
+      Number.isFinite(rangoFinal) && rangoFinal > ini ? rangoFinal : 100000;
 
-    if (actual.secuencial < rangoInicial) {
-      await this.counterModel
-        .updateOne(
+    let actual;
+
+    try {
+      actual = await this.counterModel
+        .findOneAndUpdate(
           { nombre: 'factura' },
-          { $set: { secuencial: rangoInicial } },
+          { $inc: { secuencial: 1 } },
+          { new: true, upsert: true },
         )
         .exec();
+    } catch (error) {
+      const codigo = (error as { code?: number })?.code;
 
-      return rangoInicial;
+      // Dos cobros concurrentes con contador inexistente: el primer upsert
+      // inserta y el segundo recibe E11000. Se reintenta una sola vez.
+      if (codigo !== 11000) {
+        // Contador corrupto (secuencial como string del bug anterior):
+        // se repara con el valor inicial y se reintenta el incremento
+        if (codigo === 14 || codigo === 16837 || this._esErrorDeTipo(error)) {
+          await this.counterModel
+            .updateOne({ nombre: 'factura' }, { $set: { secuencial: ini } })
+            .exec();
+
+          actual = await this.counterModel
+            .findOneAndUpdate(
+              { nombre: 'factura' },
+              { $inc: { secuencial: 1 } },
+              { new: true },
+            )
+            .exec();
+        } else {
+          throw error;
+        }
+      } else {
+        actual = await this.counterModel
+          .findOneAndUpdate(
+            { nombre: 'factura' },
+            { $inc: { secuencial: 1 } },
+            { new: true },
+          )
+          .exec();
+      }
     }
 
-    if (actual.secuencial > rangoFinal) {
+    if (!actual) {
       throw new BadRequestException(
-        `Se ha agotado el rango de facturación (${rangoInicial} - ${rangoFinal}). Solicite un nuevo CAI al SAR.`,
+        'No se pudo generar el correlativo de factura',
+      );
+    }
+
+    // Si el contador quedó con un valor no numérico (string), se repara
+    if (typeof actual.secuencial !== 'number') {
+      await this.counterModel
+        .updateOne({ nombre: 'factura' }, { $set: { secuencial: ini } })
+        .exec();
+
+      return ini;
+    }
+
+    if (actual.secuencial < ini) {
+      await this.counterModel
+        .updateOne({ nombre: 'factura' }, { $set: { secuencial: ini } })
+        .exec();
+
+      return ini;
+    }
+
+    if (actual.secuencial > fin) {
+      throw new BadRequestException(
+        `Se ha agotado el rango de facturación (${ini} - ${fin}). Solicite un nuevo CAI al SAR.`,
       );
     }
 
@@ -769,10 +855,17 @@ export class CajaService {
   /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
   private _corteToResponse(doc: any): CorteCajaResponse {
     const obj = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+    const cajeroRaw = obj.cajero as unknown as {
+      _id: Types.ObjectId;
+      nombre: string;
+    } | null;
 
     return {
       id: obj._id.toString(),
-      cajero: { id: obj.cajero._id.toString(), nombre: obj.cajero.nombre },
+      cajero: {
+        id: cajeroRaw?._id?.toString() ?? '',
+        nombre: cajeroRaw?.nombre ?? '',
+      },
       fondoInicial: obj.fondoInicial,
       totalEsperado: obj.totalEsperado,
       totalReal: obj.totalReal,

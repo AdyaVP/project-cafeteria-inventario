@@ -294,6 +294,73 @@ describe('CajaService', () => {
       expect(resultado.totalReal).toBe(1000);
     });
 
+    it('redondea la diferencia a 2 decimales', async () => {
+      const apertura = new Date();
+      apertura.setHours(8, 0, 0, 0);
+
+      const doc = {
+        _id: new Types.ObjectId(),
+        cajero: new Types.ObjectId(CAJERO_ID),
+        fondoInicial: 0.1,
+        totalEsperado: 0,
+        totalReal: 0,
+        diferencia: 0,
+        totalEfectivo: 0,
+        totalTarjeta: 0,
+        totalTransferencia: 0,
+        totalPropinas: 0,
+        cantidadFacturas: 0,
+        estado: CorteEstado.ABIERTO,
+        aperturaEn: apertura,
+        save: jest.fn().mockResolvedValue(undefined),
+      };
+
+      corteModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(doc),
+      });
+
+      facturaModel.find = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([
+          {
+            total: 0.2,
+            propina: 0,
+            metodoPago: MetodoPago.EFECTIVO,
+          },
+          {
+            total: 0.1,
+            propina: 0,
+            metodoPago: MetodoPago.EFECTIVO,
+          },
+        ]),
+      });
+
+      corteModel.findById = jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue({
+          _id: new Types.ObjectId(),
+          cajero: { _id: new Types.ObjectId(CAJERO_ID), nombre: 'Cajero Test' },
+          fondoInicial: 0.1,
+          totalEsperado: 0.4,
+          totalReal: 0.4,
+          diferencia: 0,
+          totalEfectivo: 0.3,
+          totalTarjeta: 0,
+          totalTransferencia: 0,
+          totalPropinas: 0,
+          cantidadFacturas: 2,
+          estado: CorteEstado.CERRADO,
+          aperturaEn: new Date(),
+          cierreEn: new Date(),
+        }),
+      });
+
+      const resultado = await service.cerrarCaja(CAJERO_ID, 0.4);
+      expect(resultado.totalEsperado).toBe(0.4);
+      expect(resultado.diferencia).toBe(0);
+      expect(resultado.totalEfectivo).toBe(0.3);
+    });
+
     it('lanza error si no hay caja abierta', async () => {
       corteModel.findOne.mockReturnValue({
         exec: jest.fn().mockResolvedValue(null),
@@ -604,6 +671,9 @@ describe('CajaService', () => {
       mockMesasService.cerrarMesaAtomicamente.mockRejectedValue(
         new BadRequestException('Transición inválida'),
       );
+      counterModel.findOneAndUpdate.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ secuencial: 1 }),
+      });
 
       await expect(
         service.cobrarMesa(MESA_ID, CAJERO_ID, {
@@ -659,6 +729,8 @@ describe('CajaService', () => {
       ).rejects.toThrow(BadRequestException);
 
       expect(facturaModel.create).not.toHaveBeenCalled();
+      // La mesa NO debe cerrarse si falla el correlativo
+      expect(mockMesasService.cerrarMesaAtomicamente).not.toHaveBeenCalled();
     });
 
     it('lanza error si CAI ha expirado', async () => {
@@ -827,6 +899,237 @@ describe('CajaService', () => {
       );
 
       expect(mockMesasService.cerrarMesaAtomicamente).not.toHaveBeenCalled();
+    });
+
+    it('acepta pago en efectivo exacto con precios decimales', async () => {
+      corteModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ estado: CorteEstado.ABIERTO }),
+      });
+      mockMesasService.buscarPorId.mockResolvedValue({
+        id: MESA_ID,
+        numero: 5,
+        estado: MesaEstado.CUENTA_PEDIDA,
+        meseroActual: { id: MESERO_ID, nombre: 'Mesero Test' },
+      });
+      mockOrdenesService.listarEntregadasPorMesa.mockResolvedValue([
+        {
+          id: new Types.ObjectId().toHexString(),
+          items: [
+            {
+              productoId: PRODUCTO_ID,
+              nombreProducto: 'Cafe',
+              precioUnitario: 0.1,
+              cantidad: 3,
+            },
+          ],
+        },
+      ]);
+      mockProductosService.buscarVarios.mockResolvedValue(
+        new Map([[PRODUCTO_ID, { tipoIsv: TipoIsv.EXENTO }]]),
+      );
+      counterModel.findOneAndUpdate.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ secuencial: 1 }),
+      });
+      mockMesasService.cerrarMesaAtomicamente.mockResolvedValue(undefined);
+
+      const doc = mockFacturaDoc({
+        metodoPago: MetodoPago.EFECTIVO,
+        subtotal: 0.3,
+        total: 0.3,
+        montoRecibido: 0.3,
+        cambio: 0,
+      });
+      facturaModel.create.mockResolvedValue(doc);
+      facturaModel.findById = jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(doc),
+      });
+
+      const r = await service.cobrarMesa(MESA_ID, CAJERO_ID, {
+        metodoPago: MetodoPago.EFECTIVO,
+        montoRecibido: 0.3,
+      });
+
+      expect(r.total).toBe(0.3);
+      expect(r.cambio).toBe(0);
+    });
+
+    it('reintenta generacion de correlativo ante E11000', async () => {
+      corteModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ estado: CorteEstado.ABIERTO }),
+      });
+      mockMesasService.buscarPorId.mockResolvedValue({
+        id: MESA_ID,
+        numero: 5,
+        estado: MesaEstado.CUENTA_PEDIDA,
+        meseroActual: { id: MESERO_ID, nombre: 'Mesero Test' },
+      });
+      mockOrdenesService.listarEntregadasPorMesa.mockResolvedValue([
+        {
+          id: new Types.ObjectId().toHexString(),
+          items: [
+            {
+              productoId: PRODUCTO_ID,
+              nombreProducto: 'Hamburguesa',
+              precioUnitario: 100,
+              cantidad: 2,
+            },
+          ],
+        },
+      ]);
+      mockProductosService.buscarVarios.mockResolvedValue(
+        new Map([[PRODUCTO_ID, { tipoIsv: TipoIsv.GRAVADO_15 }]]),
+      );
+      mockMesasService.cerrarMesaAtomicamente.mockResolvedValue(undefined);
+
+      const errConCodigo = Object.assign(new Error('E11000'), { code: 11000 });
+      counterModel.findOneAndUpdate
+        .mockReturnValueOnce({
+          exec: jest.fn().mockRejectedValue(errConCodigo),
+        })
+        .mockReturnValueOnce({
+          exec: jest.fn().mockResolvedValue({ secuencial: 1 }),
+        });
+
+      const doc = mockFacturaDoc();
+      facturaModel.create.mockResolvedValue(doc);
+      facturaModel.findById = jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(doc),
+      });
+
+      const r = await service.cobrarMesa(MESA_ID, CAJERO_ID, {
+        metodoPago: MetodoPago.TARJETA,
+      });
+
+      expect(r.correlativo).toBe(1);
+      expect(counterModel.findOneAndUpdate).toHaveBeenCalledTimes(2);
+    });
+
+    it('respeta RANGO_INICIAL aunque llegue como string del env', async () => {
+      corteModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ estado: CorteEstado.ABIERTO }),
+      });
+      mockMesasService.buscarPorId.mockResolvedValue({
+        id: MESA_ID,
+        numero: 5,
+        estado: MesaEstado.CUENTA_PEDIDA,
+        meseroActual: { id: MESERO_ID, nombre: 'Mesero Test' },
+      });
+      mockOrdenesService.listarEntregadasPorMesa.mockResolvedValue([
+        {
+          id: new Types.ObjectId().toHexString(),
+          items: [
+            {
+              productoId: PRODUCTO_ID,
+              nombreProducto: 'Hamburguesa',
+              precioUnitario: 100,
+              cantidad: 2,
+            },
+          ],
+        },
+      ]);
+      mockProductosService.buscarVarios.mockResolvedValue(
+        new Map([[PRODUCTO_ID, { tipoIsv: TipoIsv.GRAVADO_15 }]]),
+      );
+      mockMesasService.cerrarMesaAtomicamente.mockResolvedValue(undefined);
+
+      // Env SIEMPRE devuelve strings: "500" no 500
+      mockConfigService.get = jest.fn((key: string) => {
+        if (key === 'COMERCIO_RANGO_INICIAL') return '500';
+        if (key === 'COMERCIO_RANGO_FINAL') return '1000';
+        return defaultConfig[key];
+      });
+      await createModule();
+
+      counterModel.findOneAndUpdate.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ secuencial: 1 }),
+      });
+      counterModel.updateOne = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(undefined),
+      });
+
+      const doc = mockFacturaDoc({
+        correlativo: 500,
+        numeroFactura: '001-001-000500',
+      });
+      facturaModel.create.mockResolvedValue(doc);
+      facturaModel.findById = jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(doc),
+      });
+
+      const r = await service.cobrarMesa(MESA_ID, CAJERO_ID, {
+        metodoPago: MetodoPago.TARJETA,
+      });
+
+      expect(r.correlativo).toBe(500);
+      expect(counterModel.updateOne).toHaveBeenCalledWith(
+        { nombre: 'factura' },
+        { $set: { secuencial: 500 } },
+      );
+    });
+
+    it('repara contador corrupto (secuencial string) y continua', async () => {
+      corteModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ estado: CorteEstado.ABIERTO }),
+      });
+      mockMesasService.buscarPorId.mockResolvedValue({
+        id: MESA_ID,
+        numero: 5,
+        estado: MesaEstado.CUENTA_PEDIDA,
+        meseroActual: { id: MESERO_ID, nombre: 'Mesero Test' },
+      });
+      mockOrdenesService.listarEntregadasPorMesa.mockResolvedValue([
+        {
+          id: new Types.ObjectId().toHexString(),
+          items: [
+            {
+              productoId: PRODUCTO_ID,
+              nombreProducto: 'Hamburguesa',
+              precioUnitario: 100,
+              cantidad: 2,
+            },
+          ],
+        },
+      ]);
+      mockProductosService.buscarVarios.mockResolvedValue(
+        new Map([[PRODUCTO_ID, { tipoIsv: TipoIsv.GRAVADO_15 }]]),
+      );
+      mockMesasService.cerrarMesaAtomicamente.mockResolvedValue(undefined);
+
+      const errTipo = Object.assign(
+        new Error('Cannot apply $inc to a value of non-numeric type'),
+        { code: 14 },
+      );
+      counterModel.findOneAndUpdate
+        .mockReturnValueOnce({
+          exec: jest.fn().mockRejectedValue(errTipo),
+        })
+        .mockReturnValueOnce({
+          exec: jest.fn().mockResolvedValue({ secuencial: 1 }),
+        });
+      counterModel.updateOne = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(undefined),
+      });
+
+      const doc = mockFacturaDoc();
+      facturaModel.create.mockResolvedValue(doc);
+      facturaModel.findById = jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(doc),
+      });
+
+      const r = await service.cobrarMesa(MESA_ID, CAJERO_ID, {
+        metodoPago: MetodoPago.TARJETA,
+      });
+
+      expect(r.correlativo).toBe(1);
+      expect(counterModel.updateOne).toHaveBeenCalledWith(
+        { nombre: 'factura' },
+        { $set: { secuencial: 1 } },
+      );
+      expect(counterModel.findOneAndUpdate).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -1012,6 +1315,23 @@ describe('CajaService', () => {
       expect(r.facturasAnuladas).toBe(1);
     });
 
+    it('no crashea si el cajero fue eliminado', async () => {
+      const doc = mockFacturaDoc({
+        total: 250,
+        estado: FacturaEstado.PAGADA,
+        cajero: null,
+      });
+
+      facturaModel.find = jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([doc]),
+      });
+
+      const r = await service.reporteDiario();
+      expect(r.totalFacturado).toBe(250);
+      expect(r.desglosePorCajero).toHaveLength(0);
+    });
+
     it('lanza error con fecha que no existe en el calendario', async () => {
       await expect(service.reporteDiario('2026-02-30')).rejects.toThrow(
         BadRequestException,
@@ -1081,6 +1401,35 @@ describe('CajaService', () => {
       const r = await service.listarCortes();
       expect(r).toHaveLength(1);
       expect(r[0].cajero.nombre).toBe('Cajero Test');
+    });
+
+    it('no crashea si el cajero del corte fue eliminado', async () => {
+      corteModel.find = jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([
+          {
+            _id: new Types.ObjectId(),
+            cajero: null,
+            fondoInicial: 500,
+            totalEsperado: 1000,
+            totalReal: 1000,
+            diferencia: 0,
+            totalEfectivo: 500,
+            totalTarjeta: 300,
+            totalTransferencia: 200,
+            totalPropinas: 50,
+            cantidadFacturas: 5,
+            estado: CorteEstado.CERRADO,
+            aperturaEn: new Date(),
+            cierreEn: new Date(),
+          },
+        ]),
+      });
+
+      const r = await service.listarCortes();
+      expect(r).toHaveLength(1);
+      expect(r[0].cajero).toEqual({ id: '', nombre: '' });
     });
   });
 
