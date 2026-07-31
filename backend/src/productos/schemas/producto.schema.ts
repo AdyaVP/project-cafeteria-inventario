@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
 import { ProductoTipo } from './producto-tipo.enum.js';
+import { TipoIsv } from './tipo-isv.enum.js';
 
 // Tipo utilizado para trabajar con documentos de MongoDB
 export type ProductoDocument = HydratedDocument<Producto> & {
@@ -49,15 +50,17 @@ export class Producto {
   imagenUrl?: string;
 
   // Tipo de producto utilizado por los discriminadores
-  @Prop({
-    required: true,
-    enum: ProductoTipo,
-  })
   tipo: ProductoTipo;
+
+  @Prop({
+    type: String,
+    enum: Object.values(TipoIsv),
+    default: TipoIsv.GRAVADO_15,
+  })
+  tipoIsv: TipoIsv;
 }
 
-export const ProductoSchema =
-  SchemaFactory.createForClass(Producto);
+export const ProductoSchema = SchemaFactory.createForClass(Producto);
 
 // Índice para optimizar búsquedas por nombre y tipo
 ProductoSchema.index({

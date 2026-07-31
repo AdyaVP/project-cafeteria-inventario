@@ -1,5 +1,6 @@
 import { ProductoTipo } from '../schemas/producto-tipo.enum.js';
 import { Temperatura } from '../schemas/temperatura.enum.js';
+import { TipoIsv } from '../schemas/tipo-isv.enum.js';
 
 export interface ProductoResponse {
   id: string;
@@ -9,17 +10,16 @@ export interface ProductoResponse {
   disponible: boolean;
   imagenUrl?: string;
   tipo: ProductoTipo;
+  tipoIsv: TipoIsv;
 }
 
-export interface ProductoComidaResponse
-  extends ProductoResponse {
+export interface ProductoComidaResponse extends ProductoResponse {
   tiempoPreparacionMin: number;
   calorias?: number;
   alergenos: string[];
 }
 
-export interface ProductoBebidaResponse
-  extends ProductoResponse {
+export interface ProductoBebidaResponse extends ProductoResponse {
   temperatura: Temperatura;
   tamanosDisponibles: {
     nombre: string;
@@ -27,6 +27,4 @@ export interface ProductoBebidaResponse
   }[];
 }
 
-export type ProductoDetalle =
-  | ProductoComidaResponse
-  | ProductoBebidaResponse;
+export type ProductoDetalle = ProductoComidaResponse | ProductoBebidaResponse;

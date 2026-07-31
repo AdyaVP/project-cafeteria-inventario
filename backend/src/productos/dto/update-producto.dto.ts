@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { TipoIsv } from '../schemas/tipo-isv.enum.js';
+
 export const UpdateProductoSchema = z.object({
   nombre: z.string().min(2).max(100).optional(),
 
@@ -10,7 +12,8 @@ export const UpdateProductoSchema = z.object({
   disponible: z.boolean().optional(),
 
   imagenUrl: z.string().optional(),
+
+  tipoIsv: z.enum(TipoIsv).optional(),
 });
 
-export type UpdateProductoDto =
-  z.infer<typeof UpdateProductoSchema>;
+export type UpdateProductoDto = z.infer<typeof UpdateProductoSchema>;
