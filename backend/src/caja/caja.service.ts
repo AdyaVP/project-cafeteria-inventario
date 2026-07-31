@@ -204,9 +204,12 @@ export class CajaService {
       fechaEmision: new Date(),
     });
 
-    // PASO 5 — Cerrar la mesa (queda LIBRE). MesasService.cerrarMesa
-    // emite internamente el evento mesa.estado.cambiado (Fase 3)
+    // PASO 5 — Cerrar la mesa (queda LIBRE)
     await this.mesasService.cerrarMesa(dto.mesaId);
+
+    // PASO 6 — Emitir evento mesa.estado.cambiado para que el WebSocket
+    // actualice el canvas del mesero. El evento lo emite MesasService.cerrarMesa
+    // internamente (Fase 3 del plan): se emite una sola vez, sin duplicación.
 
     // PASO 7 — Retornar la factura emitida
     const facturaPopulada = await this.facturaModel
