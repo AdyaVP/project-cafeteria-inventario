@@ -722,6 +722,14 @@ export class CajaService {
     const fin =
       Number.isFinite(rangoFinal) && rangoFinal > ini ? rangoFinal : 100000;
 
+    // El numeroFactura usa formato 001-001-XXXXXX (6 digitos SAR):
+    // un rango mayor a 999999 generaria un numero invalido
+    if (fin > 999999) {
+      throw new BadRequestException(
+        `COMERCIO_RANGO_FINAL (${fin}) excede el formato SAR de 6 digitos (max 999999).`,
+      );
+    }
+
     let actual;
 
     try {

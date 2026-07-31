@@ -867,6 +867,53 @@ describe('CajaService', () => {
       expect(mockMesasService.cerrarMesaAtomicamente).not.toHaveBeenCalled();
     });
 
+    it('rechaza config con RANGO_FINAL mayor a 999999', async () => {
+      corteModel.findOne.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ estado: CorteEstado.ABIERTO }),
+      });
+      mockMesasService.buscarPorId.mockResolvedValue({
+        id: MESA_ID,
+        numero: 5,
+        estado: MesaEstado.CUENTA_PEDIDA,
+        meseroActual: { id: MESERO_ID, nombre: 'Mesero Test' },
+      });
+      mockOrdenesService.listarEntregadasPorMesa.mockResolvedValue([
+        {
+          id: new Types.ObjectId().toHexString(),
+          items: [
+            {
+              productoId: PRODUCTO_ID,
+              nombreProducto: 'Hamburguesa',
+              precioUnitario: 100,
+              cantidad: 2,
+            },
+          ],
+        },
+      ]);
+      mockProductosService.buscarVarios.mockResolvedValue(
+        new Map([[PRODUCTO_ID, { tipoIsv: TipoIsv.GRAVADO_15 }]]),
+      );
+      mockMesasService.cerrarMesaAtomicamente.mockResolvedValue(undefined);
+
+      mockConfigService.get = jest.fn((key: string) => {
+        if (key === 'COMERCIO_RANGO_FINAL') return '1000000';
+        return defaultConfig[key];
+      });
+      await createModule();
+
+      counterModel.findOneAndUpdate.mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ secuencial: 1 }),
+      });
+
+      await expect(
+        service.cobrarMesa(MESA_ID, CAJERO_ID, {
+          metodoPago: MetodoPago.TARJETA,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(facturaModel.create).not.toHaveBeenCalled();
+    });
+
     it('lanza error si CAI ha expirado', async () => {
       mockConfigService.get = jest.fn((key: string) => {
         if (key === 'COMERCIO_FECHA_LIMITE_EMISION') return '2020-01-01';
