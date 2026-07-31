@@ -12,7 +12,10 @@ import { MesasService } from '../mesas/mesas.service.js';
 import { ProductosService } from '../productos/productos.service.js';
 import { RecetasService } from '../productos/recetas.service.js';
 import { InventarioService } from '../inventario/inventario.service.js';
-import { ProductoDetalle, ProductoComidaResponse } from '../productos/interfaces/producto-response.interface.js';
+import {
+  ProductoDetalle,
+  ProductoComidaResponse,
+} from '../productos/interfaces/producto-response.interface.js';
 import { ProductoTipo } from '../productos/schemas/producto-tipo.enum.js';
 
 import { Orden, OrdenDocument } from './schemas/orden.schema.js';
@@ -24,7 +27,11 @@ import { TipoOrden } from './schemas/tipo-orden.enum.js';
 import { Temperatura } from '../productos/schemas/temperatura.enum.js';
 import { EVENTO_ORDEN_CREADA } from '../cocina/cocina.constants.js';
 import { CrearOrdenDto, CrearOrdenItemDto } from './dto/crear-orden.dto.js';
-import { OrdenCocinaResponse, OrdenCafeteriaResponse, OrdenResponse } from './interfaces/orden-response.interface.js';
+import {
+  OrdenCocinaResponse,
+  OrdenCafeteriaResponse,
+  OrdenResponse,
+} from './interfaces/orden-response.interface.js';
 
 interface ItemProcesado {
   productoId: Types.ObjectId;
@@ -83,7 +90,7 @@ export class OrdenesService {
       .populate('items.producto', 'nombre precio')
       .exec();
 
-    return docs.map(doc => doc.toObject() as unknown as PopulatedOrden);
+    return docs.map((doc) => doc.toObject() as unknown as PopulatedOrden);
   }
 
   private async _populateFindOne(
@@ -125,7 +132,11 @@ export class OrdenesService {
 
     await this._descontarInventario(grupos);
 
-    const idsDocumentos = await this._crearDocumentos(grupos, dto.mesaId, meseroId);
+    const idsDocumentos = await this._crearDocumentos(
+      grupos,
+      dto.mesaId,
+      meseroId,
+    );
 
     const ordenesPopuladas = await this._populateFind(
       this.ordenModel.find({ _id: { $in: idsDocumentos } }),
@@ -137,26 +148,30 @@ export class OrdenesService {
       timestamp: new Date(),
     });
 
-    return ordenesPopuladas.map(orden => this._toResponse(orden));
+    return ordenesPopuladas.map((orden) => this._toResponse(orden));
   }
 
   async listarPorMesa(
     mesaId: string,
     limite = 100,
+    desde?: Date,
   ): Promise<(OrdenCocinaResponse | OrdenCafeteriaResponse)[]> {
     this._validarObjectId(mesaId);
 
+    const filtro: Record<string, unknown> = {
+      mesa: new Types.ObjectId(mesaId),
+      estadoGeneral: { $ne: OrdenEstado.ENTREGADA },
+    };
+
+    if (desde) {
+      filtro.createdAt = { $gte: desde };
+    }
+
     const ordenes = await this._populateFind(
-      this.ordenModel
-        .find({
-          mesa: new Types.ObjectId(mesaId),
-          estadoGeneral: { $ne: OrdenEstado.ENTREGADA },
-        })
-        .sort({ createdAt: -1 })
-        .limit(limite),
+      this.ordenModel.find(filtro).sort({ createdAt: -1 }).limit(limite),
     );
 
-    return ordenes.map(orden => this._toResponse(orden));
+    return ordenes.map((orden) => this._toResponse(orden));
   }
 
   async marcarOrdenEntregada(
@@ -169,7 +184,7 @@ export class OrdenesService {
     }
 
     const todosListos = orden.items.every(
-      item => item.estadoItem === ItemEstado.LISTO,
+      (item) => item.estadoItem === ItemEstado.LISTO,
     );
     if (!todosListos) {
       throw new BadRequestException(
@@ -178,7 +193,7 @@ export class OrdenesService {
     }
 
     orden.estadoGeneral = OrdenEstado.ENTREGADA;
-    orden.items.forEach(item => {
+    orden.items.forEach((item) => {
       item.estadoItem = ItemEstado.ENTREGADO;
     });
 
@@ -189,15 +204,15 @@ export class OrdenesService {
     );
 
     if (!ordenPopulada) {
-      throw new NotFoundException(`Orden con id ${orden._id} no encontrada después de guardar`);
+      throw new NotFoundException(
+        `Orden con id ${orden._id} no encontrada después de guardar`,
+      );
     }
 
     return this._toResponse(ordenPopulada);
   }
 
-  async obtenerColaCocina(
-    limite = 100,
-  ): Promise<OrdenCocinaResponse[]> {
+  async obtenerColaCocina(limite = 100): Promise<OrdenCocinaResponse[]> {
     const ordenes = await this._populateFind(
       this.ordenModel
         .find({
@@ -210,13 +225,19 @@ export class OrdenesService {
         .limit(limite),
     );
 
-    return ordenes.map(orden => this._toResponse(orden) as OrdenCocinaResponse);
+    return ordenes.map(
+      (orden) => this._toResponse(orden) as OrdenCocinaResponse,
+    );
   }
 
   async marcarEnPreparacion(
     ordenId: string,
   ): Promise<OrdenCocinaResponse | OrdenCafeteriaResponse> {
-    return this._cambiarEstadoIndividual(ordenId, OrdenEstado.PENDIENTE, OrdenEstado.EN_PREPARACION);
+    return this._cambiarEstadoIndividual(
+      ordenId,
+      OrdenEstado.PENDIENTE,
+      OrdenEstado.EN_PREPARACION,
+    );
   }
 
   async marcarLista(
@@ -252,7 +273,9 @@ export class OrdenesService {
     );
 
     if (!ordenPopulada) {
-      throw new NotFoundException(`Orden con id ${orden._id} no encontrada después de guardar`);
+      throw new NotFoundException(
+        `Orden con id ${orden._id} no encontrada después de guardar`,
+      );
     }
 
     return this._toResponse(ordenPopulada);
@@ -266,7 +289,7 @@ export class OrdenesService {
       OrdenEstado.EN_PREPARACION,
       OrdenEstado.LISTA,
       (orden) => {
-        orden.items.forEach(item => {
+        orden.items.forEach((item) => {
           item.estadoItem = ItemEstado.LISTO;
         });
       },
@@ -284,10 +307,12 @@ export class OrdenesService {
     const orden = await this._buscarOrdenPorId(ordenId);
 
     const itemObjectId = new Types.ObjectId(itemId);
-    const itemIndex = orden.items.findIndex(i => i._id.equals(itemObjectId));
+    const itemIndex = orden.items.findIndex((i) => i._id.equals(itemObjectId));
 
     if (itemIndex === -1) {
-      throw new NotFoundException(`Item con id ${itemId} no encontrado en la orden`);
+      throw new NotFoundException(
+        `Item con id ${itemId} no encontrado en la orden`,
+      );
     }
 
     orden.items[itemIndex].estadoItem = nuevoEstado;
@@ -298,10 +323,34 @@ export class OrdenesService {
     );
 
     if (!ordenPopulada) {
-      throw new NotFoundException(`Orden con id ${ordenId} no encontrada después de guardar`);
+      throw new NotFoundException(
+        `Orden con id ${ordenId} no encontrada después de guardar`,
+      );
     }
 
     return this._toResponse(ordenPopulada);
+  }
+
+  async listarEntregadasPorMesa(
+    mesaId: string,
+    desde?: Date,
+  ): Promise<(OrdenCocinaResponse | OrdenCafeteriaResponse)[]> {
+    this._validarObjectId(mesaId);
+
+    const filtro: Record<string, unknown> = {
+      mesa: new Types.ObjectId(mesaId),
+      estadoGeneral: OrdenEstado.ENTREGADA,
+    };
+
+    if (desde) {
+      filtro.createdAt = { $gte: desde };
+    }
+
+    const ordenes = await this._populateFind(
+      this.ordenModel.find(filtro).sort({ createdAt: -1 }),
+    );
+
+    return ordenes.map((orden) => this._toResponse(orden));
   }
 
   private _toResponse(
@@ -317,10 +366,11 @@ export class OrdenesService {
         id: doc.mesero._id.toString(),
         nombre: doc.mesero.nombre,
       },
-      items: doc.items.map(item => ({
+      items: doc.items.map((item) => ({
         id: item._id.toString(),
         productoId: item.producto._id.toString(),
         nombreProducto: item.producto.nombre,
+        precioUnitario: item.producto.precio,
         cantidad: item.cantidad,
         notas: item.notas,
         estadoItem: item.estadoItem,
@@ -415,7 +465,8 @@ export class OrdenesService {
 
       if (producto.tipo === ProductoTipo.COMIDA) {
         const comidaProducto = producto as ProductoComidaResponse;
-        procesado.tiempoPreparacionMin = comidaProducto.tiempoPreparacionMin ?? 0;
+        procesado.tiempoPreparacionMin =
+          comidaProducto.tiempoPreparacionMin ?? 0;
         itemsCocina.push(procesado);
       } else {
         itemsCafeteria.push(procesado);
@@ -433,7 +484,7 @@ export class OrdenesService {
   }
 
   private async _verificarStock(grupos: GrupoItems[]): Promise<void> {
-    const grupoCocina = grupos.find(g => g.tipo === TipoOrden.COCINA);
+    const grupoCocina = grupos.find((g) => g.tipo === TipoOrden.COCINA);
 
     if (!grupoCocina) {
       return;
@@ -441,7 +492,12 @@ export class OrdenesService {
 
     const ingredientesAgrupados = new Map<
       string,
-      { nombre: string; cantidadTotal: number; faltante: number; unidad: string }
+      {
+        nombre: string;
+        cantidadTotal: number;
+        faltante: number;
+        unidad: string;
+      }
     >();
 
     for (const item of grupoCocina.items) {
@@ -465,9 +521,8 @@ export class OrdenesService {
     const faltantes: string[] = [];
 
     for (const [inventarioItemId, data] of ingredientesAgrupados) {
-      const inventarioItem = await this.inventarioService.buscarPorId(
-        inventarioItemId,
-      );
+      const inventarioItem =
+        await this.inventarioService.buscarPorId(inventarioItemId);
 
       data.nombre = inventarioItem.nombre;
       data.unidad = inventarioItem.unidad;
@@ -486,7 +541,7 @@ export class OrdenesService {
   }
 
   private async _descontarInventario(grupos: GrupoItems[]): Promise<void> {
-    const grupoCocina = grupos.find(g => g.tipo === TipoOrden.COCINA);
+    const grupoCocina = grupos.find((g) => g.tipo === TipoOrden.COCINA);
 
     if (!grupoCocina) {
       return;
@@ -497,7 +552,7 @@ export class OrdenesService {
         item.productoId.toString(),
       );
 
-      const ingredientesEscalados = receta.ingredientes.map(ing => ({
+      const ingredientesEscalados = receta.ingredientes.map((ing) => ({
         inventarioItemId: ing.inventarioItemId,
         cantidad: ing.cantidad * item.cantidad,
       }));
@@ -516,7 +571,7 @@ export class OrdenesService {
     const meseroObjectId = new Types.ObjectId(meseroId);
 
     for (const grupo of grupos) {
-      const items = grupo.items.map(item => ({
+      const items = grupo.items.map((item) => ({
         producto: item.productoId,
         cantidad: item.cantidad,
         notas: item.notas,

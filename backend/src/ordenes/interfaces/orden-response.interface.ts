@@ -7,6 +7,7 @@ export interface OrdenItemResponse {
   id: string;
   productoId: string;
   nombreProducto: string;
+  precioUnitario: number;
   cantidad: number;
   notas?: string;
   estadoItem: ItemEstado;

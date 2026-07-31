@@ -15,6 +15,7 @@ import { InventarioModule } from './inventario/inventario.module.js';
 import { MesasModule } from './mesas/mesas.module.js';
 import { OrdenesModule } from './ordenes/ordenes.module.js';
 import { CocinaModule } from './cocina/cocina.module.js';
+import { CajaModule } from './caja/caja.module.js';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { CocinaModule } from './cocina/cocina.module.js';
     MesasModule,
     OrdenesModule,
     CocinaModule,
+    CajaModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
