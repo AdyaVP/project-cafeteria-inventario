@@ -195,7 +195,30 @@ export class CajaService {
       );
     }
 
-    const ordenes = await this.ordenesService.listarEntregadasPorMesa(mesaId);
+    // Solo se facturan las órdenes de la sesión actual: evita que
+    // órdenes viejas de una sesión anterior (mesa cerrada sin facturar)
+    // se cobren al siguiente cliente
+    const desde = mesa.abiertaEn ?? new Date(0);
+
+    // Se verifica primero si hay órdenes sin entregar, para dar un
+    // mensaje claro en lugar de "no hay entregadas" cuando en realidad
+    // la mesa tiene órdenes pendientes
+    const ordenesPendientes = await this.ordenesService.listarPorMesa(
+      mesaId,
+      100,
+      desde,
+    );
+
+    if (ordenesPendientes.length > 0) {
+      throw new BadRequestException(
+        'Hay órdenes sin entregar en esta mesa. Entregue todas las órdenes antes de facturar.',
+      );
+    }
+
+    const ordenes = await this.ordenesService.listarEntregadasPorMesa(
+      mesaId,
+      desde,
+    );
 
     if (ordenes.length === 0) {
       throw new BadRequestException(
@@ -313,7 +336,16 @@ export class CajaService {
         estado: FacturaEstado.PAGADA,
       });
     } catch {
-      await this._restaurarCobroFallido(mesaId, cuenta.mesero.id);
+      const restaurada = await this._restaurarCobroFallido(
+        mesaId,
+        cuenta.mesero.id,
+      );
+
+      if (!restaurada) {
+        throw new BadRequestException(
+          'Error al guardar la factura y no se pudo restaurar la mesa. Contacte a un administrador.',
+        );
+      }
 
       throw new BadRequestException(
         'Error al guardar la factura. Se restauró el estado de la mesa, intente nuevamente.',
@@ -350,6 +382,7 @@ export class CajaService {
   async listarFacturas(
     pagina = 1,
     limite = 20,
+    mesaId?: string,
   ): Promise<PaginatedResponse<FacturaResponse>> {
     if (!Number.isInteger(pagina) || pagina < 1) {
       throw new BadRequestException('La página debe ser un entero mayor a 0');
@@ -361,10 +394,17 @@ export class CajaService {
       );
     }
 
+    const filtro: Record<string, unknown> = {};
+
+    if (mesaId) {
+      this._validarObjectId(mesaId);
+      filtro.mesa = new Types.ObjectId(mesaId);
+    }
+
     const skip = (pagina - 1) * limite;
     const [facturas, total] = await Promise.all([
       this.facturaModel
-        .find()
+        .find(filtro)
         .populate('mesa', 'numero')
         .populate('mesero', 'nombre')
         .populate('cajero', 'nombre')
@@ -372,7 +412,7 @@ export class CajaService {
         .skip(skip)
         .limit(limite)
         .exec(),
-      this.facturaModel.countDocuments().exec(),
+      this.facturaModel.countDocuments(filtro).exec(),
     ]);
 
     return {
@@ -486,13 +526,13 @@ export class CajaService {
         nombre: string;
       } | null;
 
-      if (!cajero) {
-        continue;
-      }
+      // Si el cajero fue eliminado, se agrupa bajo una etiqueta
+      // genérica para que los totales del desglose cuadren
+      const id = cajero?._id.toString() ?? 'ELIMINADO';
+      const nombre = cajero?.nombre ?? 'Cajero eliminado';
 
-      const id = cajero._id.toString();
       const existente = mapaCajero.get(id) ?? {
-        nombre: cajero.nombre,
+        nombre,
         total: 0,
         cantidad: 0,
       };
@@ -580,9 +620,19 @@ export class CajaService {
       }
     }
 
-    const mapaProductos = await this.productosService.buscarVarios(
-      Array.from(idsUnicos),
-    );
+    // Si un producto fue eliminado, la orden ya tiene snapshot del nombre
+    // y precio: se factura con tipoIsv por defecto en lugar de bloquear.
+    let mapaProductos = new Map<string, { tipoIsv: TipoIsv }>();
+
+    try {
+      mapaProductos = await this.productosService.buscarVarios(
+        Array.from(idsUnicos),
+      );
+    } catch (error) {
+      if (!(error instanceof NotFoundException)) {
+        throw error;
+      }
+    }
 
     const itemsConIsv = itemsRaw.map((item) => {
       const producto = mapaProductos.get(item.productoId);
@@ -642,6 +692,7 @@ export class CajaService {
       totalGravado18,
       isv15,
       isv18,
+      total: this._round(subtotal + isv15 + isv18),
     };
   }
 
@@ -750,14 +801,16 @@ export class CajaService {
   private async _restaurarCobroFallido(
     mesaId: string,
     meseroId: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       await this.mesasService.abrirMesa(mesaId, meseroId);
       await this.mesasService.solicitarCuenta(mesaId);
+      return true;
     } catch {
       // La restauración es best-effort: si falla, la mesa queda libre,
       // pero el error original se propaga. El correlativo NO se decrementa
       // porque reutilizarlo bajo concurrencia podría duplicar facturas.
+      return false;
     }
   }
 
