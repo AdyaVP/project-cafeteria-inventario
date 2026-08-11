@@ -272,6 +272,49 @@ describe('OrdenesService', () => {
         estadoGeneral: { $ne: OrdenEstado.ENTREGADA },
       });
     });
+
+    it('aplica filtro createdAt >= desde cuando se envia desde', async () => {
+      const desde = new Date('2026-07-30T08:00:00-06:00');
+      model.find = jest.fn().mockReturnValue(mockQuery([mockDoc()]));
+
+      await service.listarPorMesa(MESA_ID, 50, desde);
+
+      expect(model.find).toHaveBeenCalledWith({
+        mesa: expect.any(Types.ObjectId),
+        estadoGeneral: { $ne: OrdenEstado.ENTREGADA },
+        createdAt: { $gte: desde },
+      });
+    });
+  });
+
+  describe('listarEntregadasPorMesa', () => {
+    it('retorna solo ordenes entregadas con limite por defecto', async () => {
+      const query = mockQuery([mockDoc()]);
+      model.find = jest.fn().mockReturnValue(query);
+
+      await service.listarEntregadasPorMesa(MESA_ID);
+
+      expect(model.find).toHaveBeenCalledWith({
+        mesa: expect.any(Types.ObjectId),
+        estadoGeneral: OrdenEstado.ENTREGADA,
+      });
+      expect(query.limit).toHaveBeenCalledWith(100);
+    });
+
+    it('aplica createdAt >= desde y limite personalizado', async () => {
+      const desde = new Date('2026-07-30T08:00:00-06:00');
+      const query = mockQuery([mockDoc()]);
+      model.find = jest.fn().mockReturnValue(query);
+
+      await service.listarEntregadasPorMesa(MESA_ID, 25, desde);
+
+      expect(model.find).toHaveBeenCalledWith({
+        mesa: expect.any(Types.ObjectId),
+        estadoGeneral: OrdenEstado.ENTREGADA,
+        createdAt: { $gte: desde },
+      });
+      expect(query.limit).toHaveBeenCalledWith(25);
+    });
   });
 
   describe('marcarOrdenEntregada', () => {

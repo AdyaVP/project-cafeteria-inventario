@@ -214,6 +214,7 @@ export class MesasService {
 
     return this._toResponse(mesaPopulada as unknown as MesaDocumentoPopulado);
   }
+
   private _validarTransicion(
     estadoActual: MesaEstado,
     estadoDestino: MesaEstado,
