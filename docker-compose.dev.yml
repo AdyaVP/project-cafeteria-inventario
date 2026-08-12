@@ -33,14 +33,13 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    env_file:
+      - ./backend/.env
     ports:
       - '4000:4000'
     environment:
       PORT: 4000
-      MONGODB_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/cafeteria?authSource=admin
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION: ${JWT_EXPIRATION}
-      FRONTEND_URL: ${FRONTEND_URL}
+      MONGODB_URI: mongodb://mongodb:27017/cafeteria
     depends_on:
       mongodb:
         condition: service_healthy

@@ -74,11 +74,7 @@ export class Orden {
   })
   estadoGeneral: OrdenEstado;
 
-  @Prop({
-    type: String,
-    enum: TipoOrden,
-    required: true,
-  })
+  // Gestionado automáticamente por Mongoose como discriminatorKey
   tipo: TipoOrden;
 }
 

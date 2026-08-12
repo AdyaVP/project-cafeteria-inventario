@@ -48,11 +48,7 @@ export class Producto {
   @Prop()
   imagenUrl?: string;
 
-  // Tipo de producto utilizado por los discriminadores
-  @Prop({
-    required: true,
-    enum: ProductoTipo,
-  })
+  // Gestionado automáticamente por Mongoose como discriminatorKey
   tipo: ProductoTipo;
 }
 
