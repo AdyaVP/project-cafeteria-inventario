@@ -1,21 +1,14 @@
 import { z } from 'zod';
 
-import { ProductoTipo } from '../schemas/producto-tipo.enum.js';
+import { CreateProductoComidaSchema } from './create-producto-comida.dto.js';
+import { CreateProductoBebidaSchema } from './create-producto-bebida.dto.js';
 
-// Validación para creación de productos
-export const CreateProductoSchema = z.object({
-  nombre: z.string().min(2).max(100),
-
-  descripcion: z.string().optional(),
-
-  precio: z.number().min(0),
-
-  disponible: z.boolean().optional(),
-
-  imagenUrl: z.string().optional(),
-
-  tipo: z.enum(ProductoTipo),
-});
+// Conserva y valida los campos propios de cada tipo de producto.
+export const CreateProductoSchema =
+  z.discriminatedUnion('tipo', [
+    CreateProductoComidaSchema,
+    CreateProductoBebidaSchema,
+  ]);
 
 export type CreateProductoDto =
   z.infer<typeof CreateProductoSchema>;

@@ -50,12 +50,31 @@ export class ProductosService {
   async crear(
     createProductoDto: CreateProductoDto,
   ): Promise<ProductoDetalle> {
+    const discriminatorName =
+      createProductoDto.tipo ===
+      ProductoTipo.COMIDA
+        ? ProductoComida.name
+        : ProductoBebida.name;
+
+    const discriminatorModel =
+      this.productoModel.discriminators?.[
+        discriminatorName
+      ];
+
+    if (!discriminatorModel) {
+      throw new BadRequestException(
+        `Discriminador ${discriminatorName} no registrado`,
+      );
+    }
+
     const producto =
-      await this.productoModel.create(
+      await discriminatorModel.create(
         createProductoDto,
       );
 
-    return this.toResponse(producto);
+    return this.toResponse(
+      producto as ProductoDocument,
+    );
   }
 
   async listar(): Promise<

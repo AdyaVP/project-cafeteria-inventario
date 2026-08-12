@@ -22,6 +22,10 @@ import {
 } from './schemas/producto-bebida.schema.js';
 
 import {
+  ProductoTipo,
+} from './schemas/producto-tipo.enum.js';
+
+import {
   Receta,
   RecetaSchema,
 } from './schemas/receta.schema.js';
@@ -36,10 +40,12 @@ import {
           {
             name: ProductoComida.name,
             schema: ProductoComidaSchema,
+            value: ProductoTipo.COMIDA,
           },
           {
             name: ProductoBebida.name,
             schema: ProductoBebidaSchema,
+            value: ProductoTipo.BEBIDA,
           },
         ],
       },
