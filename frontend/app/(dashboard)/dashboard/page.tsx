@@ -6,6 +6,7 @@ import { DataError } from '@/components/ui/DataError'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PriceDisplay } from '@/components/ui/PriceDisplay'
 import { useToast } from '@/lib/context/ToastContext'
+import { BUSINESS_TIME_ZONE, getBusinessDateISO } from '@/lib/date'
 import { useMesas } from '@/lib/hooks/useMesas'
 import { useReporteDiario } from '@/lib/hooks/useReporteDiario'
 import { useRolGuard } from '@/lib/hooks/useRolGuard'
@@ -27,9 +28,10 @@ export default function DashboardPage(): React.JSX.Element | null {
 }
 
 function DashboardContent(): React.JSX.Element {
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = getBusinessDateISO()
   const fechaActual = new Intl.DateTimeFormat('es-HN', {
     dateStyle: 'full',
+    timeZone: BUSINESS_TIME_ZONE,
   }).format(new Date())
   const { socket } = useWebSocket()
   const {
@@ -73,22 +75,22 @@ function DashboardContent(): React.JSX.Element {
         <>
           {error && <DataError message={error} onRetry={retry} />}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <KpiCard label="TOTAL SALES">
+            <KpiCard label="Ventas totales">
               <PriceDisplay
                 size="xl"
                 variant="accent"
                 amount={reporte.totalCobrado ?? 0}
               />
             </KpiCard>
-            <KpiCard label="TOTAL ORDERS">
+            <KpiCard label="Mesas atendidas">
               <span className="text-3xl font-bold">
                 {reporte.mesasAtendidas ?? 0}
               </span>
             </KpiCard>
-            <KpiCard label="AVG TICKET">
+            <KpiCard label="Ticket promedio">
               <PriceDisplay size="xl" amount={reporte.ticketPromedio ?? 0} />
             </KpiCard>
-            <KpiCard label="OCCUPIED TABLES">
+            <KpiCard label="Mesas ocupadas">
               <span className="text-3xl font-bold">
                 {mesasOcupadas} / {mesas.length}
               </span>

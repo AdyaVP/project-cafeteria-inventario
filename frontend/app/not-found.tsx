@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { Button } from '@/components/ui/Button'
 import { DASHBOARD_ROUTE } from '@/lib/constants'
 export default function NotFound(): React.JSX.Element {
   return (
@@ -9,8 +8,11 @@ export default function NotFound(): React.JSX.Element {
       <p className="mt-2 text-sm text-text-secondary">
         La ruta que buscas no existe en Comanda.
       </p>
-      <Link href={DASHBOARD_ROUTE} className="mt-8">
-        <Button>Ir al inicio</Button>
+      <Link
+        href={DASHBOARD_ROUTE}
+        className="mt-8 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-accent px-4 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+      >
+        Ir al inicio
       </Link>
     </main>
   )
