@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   UseGuards,
   UsePipes,
@@ -16,20 +17,16 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe.js';
 
 import { RecetasService } from './recetas.service.js';
 
-import {
-  CreateRecetaSchema,
-} from './dto/create-receta.dto.js';
+import { CreateRecetaSchema } from './dto/create-receta.dto.js';
 
-import type {
-  CreateRecetaDto,
-} from './dto/create-receta.dto.js';
+import type { CreateRecetaDto } from './dto/create-receta.dto.js';
+import { UpdateRecetaSchema } from './dto/update-receta.dto.js';
+import type { UpdateRecetaDto } from './dto/update-receta.dto.js';
 
 @Controller('recetas')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class RecetasController {
-  constructor(
-    private readonly recetasService: RecetasService,
-  ) {}
+  constructor(private readonly recetasService: RecetasService) {}
 
   @Get()
   @Roles(Role.ADMIN, Role.COCINA)
@@ -39,22 +36,24 @@ export class RecetasController {
 
   @Get(':productoId')
   @Roles(Role.ADMIN, Role.COCINA)
-  async buscarPorProducto(
-    @Param('productoId') productoId: string,
-  ) {
-    return this.recetasService.buscarPorProducto(
-      productoId,
-    );
+  async buscarPorProducto(@Param('productoId') productoId: string) {
+    return this.recetasService.buscarPorProducto(productoId);
   }
 
   @Post()
   @Roles(Role.ADMIN, Role.COCINA)
-  @UsePipes(
-    new ZodValidationPipe(CreateRecetaSchema),
-  )
-  async crear(
-    @Body() dto: CreateRecetaDto,
-  ) {
+  @UsePipes(new ZodValidationPipe(CreateRecetaSchema))
+  async crear(@Body() dto: CreateRecetaDto) {
     return this.recetasService.crear(dto);
+  }
+
+  @Patch(':productoId')
+  @Roles(Role.ADMIN)
+  async actualizar(
+    @Param('productoId') productoId: string,
+    @Body(new ZodValidationPipe(UpdateRecetaSchema))
+    dto: UpdateRecetaDto,
+  ) {
+    return this.recetasService.actualizar(productoId, dto);
   }
 }

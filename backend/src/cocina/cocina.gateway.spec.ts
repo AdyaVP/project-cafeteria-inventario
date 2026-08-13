@@ -4,6 +4,7 @@ import { Server, Socket } from 'socket.io';
 
 import { Role } from '../common/constants/roles.enum';
 import { OrdenEstado } from '../ordenes/schemas/orden-estado.enum';
+import { UsuariosService } from '../usuarios/usuarios.service';
 import { CocinaGateway } from './cocina.gateway';
 
 import {
@@ -16,6 +17,7 @@ import {
 describe('CocinaGateway', () => {
   let gateway: CocinaGateway;
   let mockJwtService: Record<string, jest.Mock>;
+  let mockUsuariosService: Record<string, jest.Mock>;
   let mockServer: Record<string, jest.Mock>;
   let mockClient: Record<string, unknown>;
 
@@ -30,10 +32,22 @@ describe('CocinaGateway', () => {
     mockJwtService = {
       verifyAsync: jest.fn(),
     };
+    mockUsuariosService = {
+      buscarPorId: jest.fn().mockResolvedValue({
+        id: PAYLOAD_COCINA.sub,
+        nombre: 'Cocina',
+        email: PAYLOAD_COCINA.email,
+        roles: PAYLOAD_COCINA.roles,
+        activo: true,
+        createdAt: new Date(),
+      }),
+    };
 
     mockServer = {
       to: jest.fn().mockReturnThis(),
+      in: jest.fn().mockReturnThis(),
       emit: jest.fn(),
+      disconnectSockets: jest.fn(),
     };
 
     mockClient = {
@@ -51,6 +65,7 @@ describe('CocinaGateway', () => {
       providers: [
         CocinaGateway,
         { provide: JwtService, useValue: mockJwtService },
+        { provide: UsuariosService, useValue: mockUsuariosService },
       ],
     }).compile();
 
@@ -87,9 +102,7 @@ describe('CocinaGateway', () => {
     });
 
     it('debe desconectar si el JWT es invalido', async () => {
-      mockJwtService.verifyAsync.mockRejectedValue(
-        new Error('Token invalido'),
-      );
+      mockJwtService.verifyAsync.mockRejectedValue(new Error('Token invalido'));
 
       await gateway.handleConnection(mockClient as unknown as Socket);
 
@@ -103,12 +116,63 @@ describe('CocinaGateway', () => {
         roles: [Role.MESERO],
       };
       mockJwtService.verifyAsync.mockResolvedValue(payloadMesero);
+      mockUsuariosService.buscarPorId.mockResolvedValue({
+        id: payloadMesero.sub,
+        nombre: 'Mesero',
+        email: payloadMesero.email,
+        roles: payloadMesero.roles,
+        activo: true,
+        createdAt: new Date(),
+      });
 
       await gateway.handleConnection(mockClient as unknown as Socket);
 
       expect(mockClient.join).toHaveBeenCalledWith('user:user-id');
       expect(mockClient.join).not.toHaveBeenCalledWith(SALA_COCINA);
       expect(mockClient.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('debe desconectar si el usuario fue desactivado', async () => {
+      mockJwtService.verifyAsync.mockResolvedValue(PAYLOAD_COCINA);
+      mockUsuariosService.buscarPorId.mockResolvedValue({
+        id: PAYLOAD_COCINA.sub,
+        nombre: 'Cocina',
+        email: PAYLOAD_COCINA.email,
+        roles: PAYLOAD_COCINA.roles,
+        activo: false,
+        createdAt: new Date(),
+      });
+
+      await gateway.handleConnection(mockClient as unknown as Socket);
+
+      expect(mockClient.disconnect).toHaveBeenCalled();
+      expect(mockClient.join).not.toHaveBeenCalled();
+    });
+
+    it('usa los roles actuales de base de datos y no los roles viejos del JWT', async () => {
+      mockJwtService.verifyAsync.mockResolvedValue(PAYLOAD_COCINA);
+      mockUsuariosService.buscarPorId.mockResolvedValue({
+        id: PAYLOAD_COCINA.sub,
+        nombre: 'Usuario actualizado',
+        email: PAYLOAD_COCINA.email,
+        roles: [Role.MESERO],
+        activo: true,
+        createdAt: new Date(),
+      });
+
+      await gateway.handleConnection(mockClient as unknown as Socket);
+
+      expect(mockClient.join).toHaveBeenCalledWith('user:user-id');
+      expect(mockClient.join).not.toHaveBeenCalledWith(SALA_COCINA);
+    });
+  });
+
+  describe('manejarAutorizacionUsuarioCambiada', () => {
+    it('desconecta sockets existentes para forzar una autorización nueva', () => {
+      gateway.manejarAutorizacionUsuarioCambiada({ usuarioId: 'user-id' });
+
+      expect(mockServer.in).toHaveBeenCalledWith('user:user-id');
+      expect(mockServer.disconnectSockets).toHaveBeenCalledWith(true);
     });
   });
 
@@ -123,7 +187,10 @@ describe('CocinaGateway', () => {
       gateway.manejarOrdenCreada(payload);
 
       expect(mockServer.to).toHaveBeenCalledWith(SALA_COCINA);
-      expect(mockServer.emit).toHaveBeenCalledWith(EVENTO_WS_NUEVA_ORDEN, payload);
+      expect(mockServer.emit).toHaveBeenCalledWith(
+        EVENTO_WS_NUEVA_ORDEN,
+        payload,
+      );
     });
   });
 
@@ -146,10 +213,16 @@ describe('CocinaGateway', () => {
 
   describe('emitirEstadoOrden', () => {
     it('debe emitir orden-actualizada al room cocina y al room del mesero', () => {
-      gateway.emitirEstadoOrden('orden-1', OrdenEstado.LISTA, 'mesero-id', {
-        id: 'mesa-id',
-        numero: 5,
-      }, 'COCINA');
+      gateway.emitirEstadoOrden(
+        'orden-1',
+        OrdenEstado.LISTA,
+        'mesero-id',
+        {
+          id: 'mesa-id',
+          numero: 5,
+        },
+        'COCINA',
+      );
 
       expect(mockServer.to).toHaveBeenCalledWith(SALA_COCINA);
       expect(mockServer.to).toHaveBeenCalledWith('user:mesero-id');

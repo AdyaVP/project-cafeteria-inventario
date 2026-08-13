@@ -22,10 +22,22 @@ import { InventarioService } from '../src/inventario/inventario.service.js';
 import { ProductosService } from '../src/productos/productos.service.js';
 import { RecetasService } from '../src/productos/recetas.service.js';
 import { MesasService } from '../src/mesas/mesas.service.js';
-import { Usuario, UsuarioDocument } from '../src/usuarios/schemas/usuario.schema.js';
-import { InventarioItem, InventarioItemDocument } from '../src/inventario/schemas/inventario-item.schema.js';
-import { Producto, ProductoDocument } from '../src/productos/schemas/producto.schema.js';
-import { Receta, RecetaDocument } from '../src/productos/schemas/receta.schema.js';
+import {
+  Usuario,
+  UsuarioDocument,
+} from '../src/usuarios/schemas/usuario.schema.js';
+import {
+  InventarioItem,
+  InventarioItemDocument,
+} from '../src/inventario/schemas/inventario-item.schema.js';
+import {
+  Producto,
+  ProductoDocument,
+} from '../src/productos/schemas/producto.schema.js';
+import {
+  Receta,
+  RecetaDocument,
+} from '../src/productos/schemas/receta.schema.js';
 import { Mesa, MesaDocument } from '../src/mesas/schemas/mesa.schema.js';
 import { Role } from '../src/common/constants/roles.enum.js';
 import { ProductoTipo } from '../src/productos/schemas/producto-tipo.enum.js';
@@ -94,14 +106,62 @@ async function main(): Promise<void> {
   // ── 2. Inventario ───────────────────────────────────────────────
   const inv = await Promise.all(
     [
-      { nombre: 'Harina', unidad: Unidad.KG, stockActual: 20, stockMinimo: 5, costoUnitario: 15 },
-      { nombre: 'Queso', unidad: Unidad.KG, stockActual: 10, stockMinimo: 3, costoUnitario: 80 },
-      { nombre: 'Carne molida', unidad: Unidad.KG, stockActual: 15, stockMinimo: 4, costoUnitario: 90 },
-      { nombre: 'Papas', unidad: Unidad.KG, stockActual: 25, stockMinimo: 6, costoUnitario: 25 },
-      { nombre: 'Salsa tomate', unidad: Unidad.UNIDAD, stockActual: 40, stockMinimo: 10, costoUnitario: 8 },
-      { nombre: 'Cafe', unidad: Unidad.KG, stockActual: 12, stockMinimo: 3, costoUnitario: 150 },
-      { nombre: 'Leche', unidad: Unidad.LT, stockActual: 18, stockMinimo: 5, costoUnitario: 30 },
-      { nombre: 'Azucar', unidad: Unidad.KG, stockActual: 15, stockMinimo: 4, costoUnitario: 20 },
+      {
+        nombre: 'Harina',
+        unidad: Unidad.KG,
+        stockActual: 20,
+        stockMinimo: 5,
+        costoUnitario: 15,
+      },
+      {
+        nombre: 'Queso',
+        unidad: Unidad.KG,
+        stockActual: 10,
+        stockMinimo: 3,
+        costoUnitario: 80,
+      },
+      {
+        nombre: 'Carne molida',
+        unidad: Unidad.KG,
+        stockActual: 15,
+        stockMinimo: 4,
+        costoUnitario: 90,
+      },
+      {
+        nombre: 'Papas',
+        unidad: Unidad.KG,
+        stockActual: 25,
+        stockMinimo: 6,
+        costoUnitario: 25,
+      },
+      {
+        nombre: 'Salsa tomate',
+        unidad: Unidad.UNIDAD,
+        stockActual: 40,
+        stockMinimo: 10,
+        costoUnitario: 8,
+      },
+      {
+        nombre: 'Cafe',
+        unidad: Unidad.KG,
+        stockActual: 12,
+        stockMinimo: 3,
+        costoUnitario: 150,
+      },
+      {
+        nombre: 'Leche',
+        unidad: Unidad.LT,
+        stockActual: 18,
+        stockMinimo: 5,
+        costoUnitario: 30,
+      },
+      {
+        nombre: 'Azucar',
+        unidad: Unidad.KG,
+        stockActual: 15,
+        stockMinimo: 4,
+        costoUnitario: 20,
+      },
     ].map((item) => inventario.crear(item)),
   );
   console.log('[seed] Inventario creado:', inv.length, 'items');
@@ -178,10 +238,19 @@ async function main(): Promise<void> {
   const bebida = await Promise.all(
     productosBebida.map((p) => productos.crear(p)),
   );
-  console.log('[seed] Productos creados:', comida.length, 'COMIDA +', bebida.length, 'BEBIDA');
+  console.log(
+    '[seed] Productos creados:',
+    comida.length,
+    'COMIDA +',
+    bebida.length,
+    'BEBIDA',
+  );
 
   // ── 5. Recetas (SOLO para productos COMIDA) ─────────────────────
-  const recetasData: Array<{ productoId: string; ingredientes: Array<{ inventarioItemId: string; cantidad: number }> }> = [
+  const recetasData: Array<{
+    productoId: string;
+    ingredientes: Array<{ inventarioItemId: string; cantidad: number }>;
+  }> = [
     {
       productoId: comida[0].id, // Hamburguesa
       ingredientes: [
@@ -209,6 +278,9 @@ async function main(): Promise<void> {
   for (const r of recetasData) {
     await recetas.crear(r);
   }
+  await Promise.all(
+    comida.map((producto) => productos.toggleDisponibilidad(producto.id)),
+  );
   console.log('[seed] Recetas creadas:', recetasData.length, '(solo COMIDA)');
 
   // ── 6. Mesas LIBRES ─────────────────────────────────────────────

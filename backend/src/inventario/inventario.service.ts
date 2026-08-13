@@ -7,10 +7,7 @@ import {
 
 import { InjectModel } from '@nestjs/mongoose';
 
-import {
-  Model,
-  Types,
-} from 'mongoose';
+import { Model, Types } from 'mongoose';
 import type { ClientSession } from 'mongoose';
 
 import {
@@ -20,9 +17,7 @@ import {
 
 import type { CreateInventarioItemDto } from './dto/create-inventario-item.dto.js';
 
-import type {
-  InventarioResponse,
-} from './interfaces/inventario-response.interface.js';
+import type { InventarioResponse } from './interfaces/inventario-response.interface.js';
 
 @Injectable()
 export class InventarioService {
@@ -31,35 +26,24 @@ export class InventarioService {
     private readonly inventarioModel: Model<InventarioItemDocument>,
   ) {}
 
-  async crear(
-    dto: CreateInventarioItemDto,
-  ): Promise<InventarioResponse> {
-    const existente =
-      await this.inventarioModel.findOne({
-        nombre: dto.nombre,
-      });
+  async crear(dto: CreateInventarioItemDto): Promise<InventarioResponse> {
+    const existente = await this.inventarioModel.findOne({
+      nombre: dto.nombre,
+    });
 
     if (existente) {
-      throw new ConflictException(
-        'Ya existe un insumo con ese nombre',
-      );
+      throw new ConflictException('Ya existe un insumo con ese nombre');
     }
 
-    const item =
-      await this.inventarioModel.create(dto);
+    const item = await this.inventarioModel.create(dto);
 
     return this.toResponse(item);
   }
 
-  async listar(): Promise<
-    InventarioResponse[]
-  > {
-    const items =
-      await this.inventarioModel.find();
+  async listar(): Promise<InventarioResponse[]> {
+    const items = await this.inventarioModel.find();
 
-    return items.map((item) =>
-      this.toResponse(item),
-    );
+    return items.map((item) => this.toResponse(item));
   }
 
   async buscarPorId(
@@ -73,9 +57,7 @@ export class InventarioService {
       : await this.inventarioModel.findById(id);
 
     if (!item) {
-      throw new NotFoundException(
-        'Insumo no encontrado',
-      );
+      throw new NotFoundException('Insumo no encontrado');
     }
 
     return this.toResponse(item);
@@ -88,50 +70,40 @@ export class InventarioService {
   ): Promise<InventarioResponse> {
     this.validarObjectId(id);
 
-    const item =
-      await this.inventarioModel.findById(id);
+    const filtro: Record<string, unknown> = {
+      _id: new Types.ObjectId(id),
+    };
+    const incremento = operacion === 'AGREGAR' ? cantidad : -cantidad;
+
+    if (operacion === 'DESCONTAR') {
+      filtro.stockActual = { $gte: cantidad };
+    }
+
+    const item = await this.inventarioModel.findOneAndUpdate(
+      filtro,
+      { $inc: { stockActual: incremento } },
+      { new: true },
+    );
 
     if (!item) {
-      throw new NotFoundException(
-        'Insumo no encontrado',
-      );
-    }
-
-    if (operacion === 'AGREGAR') {
-      item.stockActual += cantidad;
-    } else {
-      if (
-        item.stockActual - cantidad < 0
-      ) {
-        throw new BadRequestException(
-          'Stock insuficiente',
-        );
+      const existente = await this.inventarioModel.exists({ _id: id });
+      if (!existente) {
+        throw new NotFoundException('Insumo no encontrado');
       }
-
-      item.stockActual -= cantidad;
+      throw new BadRequestException('Stock insuficiente');
     }
-
-    await item.save();
 
     return this.toResponse(item);
   }
 
-  async obtenerAlertas(): Promise<
-    InventarioResponse[]
-  > {
-    const items =
-      await this.inventarioModel.find({
-        $expr: {
-          $lte: [
-            '$stockActual',
-            '$stockMinimo',
-          ],
-        },
-      });
+  async obtenerAlertas(): Promise<InventarioResponse[]> {
+    const items = await this.inventarioModel.find({
+      $expr: {
+        $lte: ['$stockActual', '$stockMinimo'],
+      },
+    });
 
-    return items.map((item) =>
-      this.toResponse(item),
-    );
+    return items.map((item) => this.toResponse(item));
   }
 
   async descontarPorReceta(
@@ -142,43 +114,38 @@ export class InventarioService {
     session?: ClientSession,
   ): Promise<void> {
     for (const ingrediente of ingredientes) {
-      this.validarObjectId(
-        ingrediente.inventarioItemId,
+      this.validarObjectId(ingrediente.inventarioItemId);
+
+      const opciones = session ? { new: true, session } : { new: true };
+      const item = await this.inventarioModel.findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(ingrediente.inventarioItemId),
+          stockActual: { $gte: ingrediente.cantidad },
+        },
+        { $inc: { stockActual: -ingrediente.cantidad } },
+        opciones,
       );
 
-      const item = session
-        ? await this.inventarioModel.findById(ingrediente.inventarioItemId).session(session)
-        : await this.inventarioModel.findById(ingrediente.inventarioItemId);
-
       if (!item) {
-        throw new NotFoundException(
-          `Insumo no encontrado: ${ingrediente.inventarioItemId}`,
+        const consulta = this.inventarioModel.findById(
+          ingrediente.inventarioItemId,
         );
-      }
-
-      if (
-        item.stockActual <
-        ingrediente.cantidad
-      ) {
+        const existente = session
+          ? await consulta.session(session)
+          : await consulta;
+        if (!existente) {
+          throw new NotFoundException(
+            `Insumo no encontrado: ${ingrediente.inventarioItemId}`,
+          );
+        }
         throw new BadRequestException(
-          `Stock insuficiente para ${item.nombre}`,
+          `Stock insuficiente para ${existente.nombre}`,
         );
-      }
-
-      item.stockActual -=
-        ingrediente.cantidad;
-
-      if (session) {
-        await item.save({ session });
-      } else {
-        await item.save();
       }
     }
   }
 
-  private toResponse(
-    item: InventarioItemDocument,
-  ): InventarioResponse {
+  private toResponse(item: InventarioItemDocument): InventarioResponse {
     return {
       id: item._id.toString(),
       nombre: item.nombre,
@@ -190,13 +157,9 @@ export class InventarioService {
     };
   }
 
-  private validarObjectId(
-    id: string,
-  ): void {
+  private validarObjectId(id: string): void {
     if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException(
-        'ID inválido',
-      );
+      throw new BadRequestException('ID inválido');
     }
   }
 }

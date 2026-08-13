@@ -122,6 +122,7 @@ describe('WebSocket mesero recibe orden LISTA (Fase 6 paso 22)', () => {
       productoId: producto.id,
       ingredientes: [{ inventarioItemId: ingrediente.id, cantidad: 1 }],
     });
+    await productos.toggleDisponibilidad(producto.id);
 
     const mesa = await mesas.crear({ numero: 88, capacidad: 4 });
     mesaId = mesa.id;
@@ -186,12 +187,24 @@ describe('WebSocket mesero recibe orden LISTA (Fase 6 paso 22)', () => {
     const socketCocina = conectarSocket(cocinaCookie);
 
     await Promise.all([
-      new Promise<void>((resolve) => socketMesero.on('connect', () => resolve())),
-      new Promise<void>((resolve) => socketCocina.on('connect', () => resolve())),
+      new Promise<void>((resolve) =>
+        socketMesero.on('connect', () => resolve()),
+      ),
+      new Promise<void>((resolve) =>
+        socketCocina.on('connect', () => resolve()),
+      ),
     ]);
 
-    const promesaMesero = esperarEvento(socketMesero, 'orden-actualizada', 'LISTA');
-    const promesaCocina = esperarEvento(socketCocina, 'orden-actualizada', 'LISTA');
+    const promesaMesero = esperarEvento(
+      socketMesero,
+      'orden-actualizada',
+      'LISTA',
+    );
+    const promesaCocina = esperarEvento(
+      socketCocina,
+      'orden-actualizada',
+      'LISTA',
+    );
 
     // MESERO abre mesa y crea orden (via HTTP)
     const agenteMesero = request.agent(server);
@@ -245,7 +258,9 @@ describe('WebSocket mesero recibe orden LISTA (Fase 6 paso 22)', () => {
 
     const sesionOtro = await loginYExtraerCookie('otro-mesero-ws@e2e.local');
     const socketOtro = conectarSocket(sesionOtro.cookie);
-    await new Promise<void>((resolve) => socketOtro.on('connect', () => resolve()));
+    await new Promise<void>((resolve) =>
+      socketOtro.on('connect', () => resolve()),
+    );
 
     // Mesa nueva para este test
     const mesaNueva = await mesas.crear({ numero: 89, capacidad: 4 });

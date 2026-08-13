@@ -18,7 +18,10 @@ import type { JwtPayload } from '../common/interfaces/jwt-payload.interface.js';
 
 import { CrearOrdenSchema } from './dto/crear-orden.dto.js';
 import type { CrearOrdenDto } from './dto/crear-orden.dto.js';
-import { OrdenCocinaResponse, OrdenCafeteriaResponse } from './interfaces/orden-response.interface.js';
+import {
+  OrdenCocinaResponse,
+  OrdenCafeteriaResponse,
+} from './interfaces/orden-response.interface.js';
 import { OrdenesService } from './ordenes.service.js';
 
 @Controller('ordenes')
@@ -48,7 +51,8 @@ export class OrdenesController {
   @Roles(Role.MESERO)
   async marcarEntregada(
     @Param('id') id: string,
+    @CurrentUser() usuario: JwtPayload,
   ): Promise<OrdenCocinaResponse | OrdenCafeteriaResponse> {
-    return this.ordenesService.marcarOrdenEntregada(id);
+    return this.ordenesService.marcarOrdenEntregada(id, usuario.sub);
   }
 }

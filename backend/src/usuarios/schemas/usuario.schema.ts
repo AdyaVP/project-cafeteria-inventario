@@ -24,6 +24,9 @@ export class Usuario {
 
   @Prop({ default: true })
   activo: boolean;
+
+  @Prop({ type: Date, default: null })
+  ultimaAsignacionEn: Date | null;
 }
 
 export const UsuarioSchema = SchemaFactory.createForClass(Usuario);

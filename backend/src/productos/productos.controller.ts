@@ -85,14 +85,10 @@ export class ProductosController {
 
   @Patch(':id')
   @Roles(Role.ADMIN)
-  @UsePipes(
-    new ZodValidationPipe(
-      UpdateProductoSchema,
-    ),
-  )
   async actualizar(
     @Param('id') id: string,
-    @Body() dto: UpdateProductoDto,
+    @Body(new ZodValidationPipe(UpdateProductoSchema))
+    dto: UpdateProductoDto,
   ) {
     return this.productosService.actualizar(
       id,

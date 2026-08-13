@@ -81,8 +81,12 @@ describe('Flujo completo Fase 6 (E2E)', () => {
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalFilters(new (require('../src/common/filters/http-exception.filter').HttpExceptionFilter)());
-    app.useGlobalInterceptors(new (require('../src/common/interceptors/response.interceptor').ResponseInterceptor)());
+    app.useGlobalFilters(
+      new (require('../src/common/filters/http-exception.filter').HttpExceptionFilter)(),
+    );
+    app.useGlobalInterceptors(
+      new (require('../src/common/interceptors/response.interceptor').ResponseInterceptor)(),
+    );
     app.use(require('cookie-parser')());
     app.use(require('express').json());
     await app.init();
@@ -94,9 +98,7 @@ describe('Flujo completo Fase 6 (E2E)', () => {
     recetas = app.get(RecetasService);
     mesas = app.get(MesasService);
     ordenModel = app.get<Model<OrdenDocument>>(getModelToken(Orden.name));
-    facturaModel = app.get<Model<FacturaDocument>>(
-      getModelToken(Factura.name),
-    );
+    facturaModel = app.get<Model<FacturaDocument>>(getModelToken(Factura.name));
 
     const conexion = app.get(getConnectionToken());
     await conexion.dropDatabase();
@@ -141,11 +143,41 @@ describe('Flujo completo Fase 6 (E2E)', () => {
 
     const inv = await Promise.all(
       [
-        { nombre: 'Harina', unidad: Unidad.KG, stockActual: 20, stockMinimo: 5, costoUnitario: 15 },
-        { nombre: 'Queso', unidad: Unidad.KG, stockActual: 10, stockMinimo: 3, costoUnitario: 80 },
-        { nombre: 'Carne molida', unidad: Unidad.KG, stockActual: 15, stockMinimo: 4, costoUnitario: 90 },
-        { nombre: 'Papas', unidad: Unidad.KG, stockActual: 25, stockMinimo: 6, costoUnitario: 25 },
-        { nombre: 'Salsa tomate', unidad: Unidad.UNIDAD, stockActual: 40, stockMinimo: 10, costoUnitario: 8 },
+        {
+          nombre: 'Harina',
+          unidad: Unidad.KG,
+          stockActual: 20,
+          stockMinimo: 5,
+          costoUnitario: 15,
+        },
+        {
+          nombre: 'Queso',
+          unidad: Unidad.KG,
+          stockActual: 10,
+          stockMinimo: 3,
+          costoUnitario: 80,
+        },
+        {
+          nombre: 'Carne molida',
+          unidad: Unidad.KG,
+          stockActual: 15,
+          stockMinimo: 4,
+          costoUnitario: 90,
+        },
+        {
+          nombre: 'Papas',
+          unidad: Unidad.KG,
+          stockActual: 25,
+          stockMinimo: 6,
+          costoUnitario: 25,
+        },
+        {
+          nombre: 'Salsa tomate',
+          unidad: Unidad.UNIDAD,
+          stockActual: 40,
+          stockMinimo: 10,
+          costoUnitario: 8,
+        },
       ].map((item) => inventario.crear(item)),
     );
     const invById = new Map(inv.map((i) => [i.nombre, i.id]));
@@ -211,6 +243,9 @@ describe('Flujo completo Fase 6 (E2E)', () => {
         { inventarioItemId: invById.get('Salsa tomate')!, cantidad: 1 },
       ],
     });
+    await Promise.all(
+      comidas.map((producto) => productos.toggleDisponibilidad(producto.id)),
+    );
 
     for (const numero of [1, 2]) {
       await mesas.crear({ numero, capacidad: 4 });
@@ -315,6 +350,11 @@ describe('Flujo completo Fase 6 (E2E)', () => {
         .expect(200);
       expect(entregada.body.data.estadoGeneral).toBe('ENTREGADA');
     }
+
+    await productos.actualizar(estado.hamburguesa, {
+      nombre: 'Hamburguesa Editada',
+      precio: 999,
+    });
   });
 
   it('paso 12-13: RONDA 2 (pizza + refresco) y entrega', async () => {
@@ -353,6 +393,7 @@ describe('Flujo completo Fase 6 (E2E)', () => {
     const items = pre.body.data.items as Array<{
       nombre: string;
       cantidad: number;
+      precioUnitario: number;
       subtotal: number;
     }>;
     const nombres = items.map((i) => i.nombre).sort();
@@ -363,6 +404,15 @@ describe('Flujo completo Fase 6 (E2E)', () => {
     const subtotal = items.reduce((sum, i) => sum + i.subtotal, 0);
     expect(subtotal).toBe(120 * 2 + 45 + 150 + 35 * 2);
     expect(pre.body.data.subtotal).toBe(subtotal);
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nombre: 'Hamburguesa',
+          precioUnitario: 120,
+          cantidad: 2,
+        }),
+      ]),
+    );
     expect(pre.body.data.impuesto).toBe(
       Math.round(subtotal * 0.15 * 100) / 100,
     );

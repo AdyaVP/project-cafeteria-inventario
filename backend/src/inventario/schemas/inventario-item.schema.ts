@@ -3,11 +3,10 @@ import { HydratedDocument } from 'mongoose';
 
 import { Unidad } from './unidad.enum.js';
 
-export type InventarioItemDocument =
-  HydratedDocument<InventarioItem> & {
-    createdAt: Date;
-    updatedAt: Date;
-  };
+export type InventarioItemDocument = HydratedDocument<InventarioItem> & {
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 // Representa un ingrediente o insumo almacenado
 @Schema({
@@ -26,6 +25,7 @@ export class InventarioItem {
 
   // Unidad de medida utilizada para el stock
   @Prop({
+    type: String,
     required: true,
     enum: Unidad,
   })
@@ -63,7 +63,4 @@ export const InventarioItemSchema =
   SchemaFactory.createForClass(InventarioItem);
 
 // Evita duplicados de ingredientes
-InventarioItemSchema.index(
-  { nombre: 1 },
-  { unique: true },
-);
+InventarioItemSchema.index({ nombre: 1 }, { unique: true });
