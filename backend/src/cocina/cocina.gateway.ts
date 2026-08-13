@@ -60,6 +60,9 @@ export class CocinaGateway
 
       client.data.usuario = payload;
 
+      // Room personal por usuario: recibe eventos dirigidos a su sesion
+      client.join(`user:${payload.sub}`);
+
       if (payload.roles.includes(Role.COCINA)) {
         client.join(SALA_COCINA);
       }
@@ -83,12 +86,22 @@ export class CocinaGateway
   emitirEstadoOrden(
     ordenId: string,
     nuevoEstado: OrdenEstado,
+    meseroId: string,
+    mesa: { id: string; numero: number },
+    tipo: string,
   ): void {
-    this.server.to(SALA_COCINA).emit(EVENTO_WS_ORDEN_ACTUALIZADA, {
+    const payload = {
       ordenId,
+      mesaId: mesa.id,
+      mesaNumero: mesa.numero,
+      meseroId,
+      tipo,
       nuevoEstado,
       timestamp: new Date(),
-    });
+    };
+
+    this.server.to(SALA_COCINA).emit(EVENTO_WS_ORDEN_ACTUALIZADA, payload);
+    this.server.to(`user:${meseroId}`).emit(EVENTO_WS_ORDEN_ACTUALIZADA, payload);
   }
 
   private _extraerToken(client: Socket): string | null {

@@ -59,11 +59,12 @@ describe('CocinaGateway', () => {
   });
 
   describe('handleConnection', () => {
-    it('debe conectar y unir al room cocina si el rol es COCINA', async () => {
+    it('debe conectar, unir al room user y al room cocina si el rol es COCINA', async () => {
       mockJwtService.verifyAsync.mockResolvedValue(PAYLOAD_COCINA);
 
       await gateway.handleConnection(mockClient as unknown as Socket);
 
+      expect(mockClient.join).toHaveBeenCalledWith('user:user-id');
       expect(mockClient.join).toHaveBeenCalledWith(SALA_COCINA);
       expect(mockClient.disconnect).not.toHaveBeenCalled();
       expect((mockClient.data as Record<string, unknown>).usuario).toEqual(
@@ -95,7 +96,7 @@ describe('CocinaGateway', () => {
       expect(mockClient.disconnect).toHaveBeenCalled();
     });
 
-    it('debe conectar sin unir a room si el rol no es COCINA', async () => {
+    it('debe conectar, unir al room user y NO al de cocina si el rol no es COCINA', async () => {
       const payloadMesero = {
         sub: 'user-id',
         email: 'mesero@test.com',
@@ -105,7 +106,8 @@ describe('CocinaGateway', () => {
 
       await gateway.handleConnection(mockClient as unknown as Socket);
 
-      expect(mockClient.join).not.toHaveBeenCalled();
+      expect(mockClient.join).toHaveBeenCalledWith('user:user-id');
+      expect(mockClient.join).not.toHaveBeenCalledWith(SALA_COCINA);
       expect(mockClient.disconnect).not.toHaveBeenCalled();
     });
   });
@@ -143,15 +145,23 @@ describe('CocinaGateway', () => {
   });
 
   describe('emitirEstadoOrden', () => {
-    it('debe emitir orden-actualizada al room cocina', () => {
-      gateway.emitirEstadoOrden('orden-1', OrdenEstado.LISTA);
+    it('debe emitir orden-actualizada al room cocina y al room del mesero', () => {
+      gateway.emitirEstadoOrden('orden-1', OrdenEstado.LISTA, 'mesero-id', {
+        id: 'mesa-id',
+        numero: 5,
+      }, 'COCINA');
 
       expect(mockServer.to).toHaveBeenCalledWith(SALA_COCINA);
+      expect(mockServer.to).toHaveBeenCalledWith('user:mesero-id');
       expect(mockServer.emit).toHaveBeenCalledWith(
         EVENTO_WS_ORDEN_ACTUALIZADA,
         expect.objectContaining({
           ordenId: 'orden-1',
           nuevoEstado: OrdenEstado.LISTA,
+          mesaId: 'mesa-id',
+          mesaNumero: 5,
+          meseroId: 'mesero-id',
+          tipo: 'COCINA',
         }),
       );
     });
