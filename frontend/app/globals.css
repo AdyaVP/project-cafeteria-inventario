@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  min-height: 100%;
+}
+body {
+  @apply bg-bg-base font-sans text-text-primary antialiased;
+  margin: 0;
+}
+button,
+input {
+  font: inherit;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme('colors.border.default') theme('colors.bg.surface');
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: theme('colors.bg.surface');
+}
+*::-webkit-scrollbar-thumb {
+  background: theme('colors.border.default');
+  border-radius: 4px;
+}
+@keyframes toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+.animate-toast-progress {
+  animation-name: toast-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
