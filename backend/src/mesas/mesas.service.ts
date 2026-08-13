@@ -8,6 +8,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Model } from 'mongoose';
 import * as mongoose from 'mongoose';
+import type { ClientSession } from 'mongoose';
 
 import { Mesa, MesaDocument, MesaEstado } from './schemas/mesa.schema.js';
 
@@ -87,18 +88,24 @@ export class MesasService {
     );
   }
 
-  async buscarPorId(id: string): Promise<MesaResponse> {
+  async buscarPorId(
+    id: string,
+    session?: ClientSession,
+  ): Promise<MesaResponse> {
     this._validarObjectId(id);
 
-    const mesa = await this.mesaModel
+    const query = this.mesaModel
       .findById(id)
       .populate<{
         meseroActual: {
           _id: mongoose.Types.ObjectId;
           nombre: string;
         } | null;
-      }>('meseroActual', 'nombre')
-      .exec();
+      }>('meseroActual', 'nombre');
+
+    const mesa = session
+      ? await query.session(session).exec()
+      : await query.exec();
 
     if (!mesa) {
       throw new NotFoundException(`Mesa con id ${id} no encontrada`);
@@ -110,20 +117,33 @@ export class MesasService {
     this._validarObjectId(mesaId);
     this._validarObjectId(meseroId);
 
-    const mesa = await this.mesaModel.findById(mesaId).exec();
+    const mesa = await this.mesaModel
+      .findOneAndUpdate(
+        {
+          _id: new mongoose.Types.ObjectId(mesaId),
+          estado: MesaEstado.LIBRE,
+        },
+        {
+          $set: {
+            estado: MesaEstado.OCUPADA,
+            meseroActual: new mongoose.Types.ObjectId(meseroId),
+            abiertaEn: new Date(),
+            cerradaEn: null,
+          },
+        },
+        { new: true },
+      )
+      .exec();
 
     if (!mesa) {
-      throw new NotFoundException(`Mesa con id ${mesaId} no encontrada`);
+      const actual = await this.mesaModel.findById(mesaId).exec();
+      if (!actual) {
+        throw new NotFoundException(`Mesa con id ${mesaId} no encontrada`);
+      }
+      throw new BadRequestException(
+        `Transición inválida: una mesa en estado ${actual.estado} no puede pasar a OCUPADA`,
+      );
     }
-
-    this._validarTransicion(mesa.estado, MesaEstado.OCUPADA);
-
-    mesa.estado = MesaEstado.OCUPADA;
-    mesa.meseroActual = new mongoose.Types.ObjectId(meseroId);
-    mesa.abiertaEn = new Date();
-    mesa.cerradaEn = null;
-
-    await mesa.save();
 
     this.eventEmitter.emit('mesa.estado.cambiado', {
       mesaId: mesa._id.toString(),
@@ -147,17 +167,30 @@ export class MesasService {
   async solicitarCuenta(mesaId: string): Promise<MesaResponse> {
     this._validarObjectId(mesaId);
 
-    const mesa = await this.mesaModel.findById(mesaId).exec();
+    const mesa = await this.mesaModel
+      .findOneAndUpdate(
+        {
+          _id: new mongoose.Types.ObjectId(mesaId),
+          estado: MesaEstado.OCUPADA,
+        },
+        {
+          $set: {
+            estado: MesaEstado.CUENTA_PEDIDA,
+          },
+        },
+        { new: true },
+      )
+      .exec();
 
     if (!mesa) {
-      throw new NotFoundException(`Mesa con id ${mesaId} no encontrada`);
+      const actual = await this.mesaModel.findById(mesaId).exec();
+      if (!actual) {
+        throw new NotFoundException(`Mesa con id ${mesaId} no encontrada`);
+      }
+      throw new BadRequestException(
+        `Transición inválida: una mesa en estado ${actual.estado} no puede pasar a CUENTA_PEDIDA`,
+      );
     }
-
-    this._validarTransicion(mesa.estado, MesaEstado.CUENTA_PEDIDA);
-
-    mesa.estado = MesaEstado.CUENTA_PEDIDA;
-
-    await mesa.save();
 
     this.eventEmitter.emit('mesa.estado.cambiado', {
       mesaId: mesa._id.toString(),
