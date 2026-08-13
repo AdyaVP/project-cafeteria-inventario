@@ -16,11 +16,8 @@ export function middleware(request: NextRequest): NextResponse {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Ya autenticado intentando ver login → ir al dashboard
-  if (pathname === '/login' && hasCookie) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
-  }
-
+  // El middleware no interpreta identidad ni roles. En /login, /auth/me es la
+  // fuente de verdad y el cliente redirige a la ruta predeterminada del rol.
   return NextResponse.next()
 }
 

@@ -8,6 +8,7 @@ export const DASHBOARD_ROUTE = '/dashboard'
 export const TOAST_DURATION_MS = 4000
 export const MAX_TOASTS = 4
 export const WS_NAMESPACE = '/cocina'
+export const AUTH_SESSION_REVALIDATE_EVENT = 'auth-session-revalidate'
 export const WS_EVENTS = {
   connect: 'connect',
   disconnect: 'disconnect',

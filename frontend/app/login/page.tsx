@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, CreditCard, Lock, Store } from 'lucide-react'
@@ -30,9 +30,16 @@ export default function LoginPage(): React.JSX.Element {
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState<LoginErrors>({})
   const [submitting, setSubmitting] = useState(false)
-  const { login } = useAuth()
+  const { login, usuario, loading } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
+
+  useEffect(() => {
+    if (!loading && usuario) {
+      router.replace(getRolDefaultRoute(usuario.roles))
+    }
+  }, [loading, router, usuario])
+
   const handleSubmit = async (
     event: FormEvent<HTMLFormElement>
   ): Promise<void> => {
@@ -47,7 +54,7 @@ export default function LoginPage(): React.JSX.Element {
     setSubmitting(true)
     try {
       const usuario = await login(result.data.email, result.data.password)
-      router.push(getRolDefaultRoute(usuario.roles))
+      router.replace(getRolDefaultRoute(usuario.roles))
     } catch (error: unknown) {
       toast.error(
         error instanceof Error ? error.message : 'No fue posible iniciar sesión'
@@ -57,9 +64,9 @@ export default function LoginPage(): React.JSX.Element {
     }
   }
   return (
-    <main className="flex h-screen overflow-hidden bg-bg-base">
-      <section className="relative z-10 flex w-full shrink-0 items-center bg-bg-base px-8 sm:px-12 md:w-[40%] lg:px-[7.5vw]">
-        <div className="w-full max-w-[300px]">
+    <main className="flex min-h-dvh overflow-y-auto bg-bg-base md:h-dvh md:overflow-hidden">
+      <section className="relative z-10 flex min-h-dvh w-full shrink-0 items-center bg-bg-base px-6 py-10 sm:px-12 md:w-[40%] md:py-8 lg:px-[7.5vw]">
+        <div className="mx-auto w-full max-w-[300px] md:mx-0">
           <div className="mb-9">
             <div className="flex items-center gap-2">
               <Store size={22} className="text-accent" />
@@ -84,7 +91,7 @@ export default function LoginPage(): React.JSX.Element {
             />
             <Input
               name="password"
-              label="Password"
+              label="Contraseña"
               type="password"
               icon={<Lock size={15} />}
               placeholder="••••••••"
@@ -94,19 +101,11 @@ export default function LoginPage(): React.JSX.Element {
               autoComplete="current-password"
               className="border-accent/30 bg-bg-base"
             />
-            <div className="flex items-center justify-between gap-2">
-              <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-xs text-text-primary"></label>
-              <button
-                type="button"
-                className="min-h-[44px] text-xs text-text-primary hover:text-accent"
-              >
-                Forgot password?
-              </button>
-            </div>
             <Button
               type="submit"
               fullWidth
               size="lg"
+              disabled={submitting}
               loading={submitting}
               icon={
                 !submitting ? (
@@ -118,12 +117,15 @@ export default function LoginPage(): React.JSX.Element {
               Acceder
             </Button>
           </form>
+          <p className="mt-12 text-[10px] text-text-disabled">
+            © {currentYear} Comanda Systems
+          </p>
         </div>
-        <p className="absolute bottom-6 left-8 text-[10px] text-text-disabled sm:left-12 lg:left-[7.5vw]">
-          © {currentYear} Comanda Systems
-        </p>
       </section>
-      <section className="relative hidden min-w-0 flex-1 overflow-hidden md:block">
+      <section
+        aria-hidden="true"
+        className="pointer-events-none relative hidden min-w-0 flex-1 overflow-hidden md:block"
+      >
         <Image
           src="/images/login-image.png"
           alt="Interior de la cafetería Comanda"
