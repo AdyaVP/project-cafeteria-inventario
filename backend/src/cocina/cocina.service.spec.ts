@@ -92,17 +92,29 @@ describe('CocinaService', () => {
       expect(mockGateway.emitirEstadoOrden).toHaveBeenCalledWith(
         ORDEN_ID,
         OrdenEstado.EN_PREPARACION,
+        'mesero-id',
+        { id: 'mesa-id', numero: 5 },
+        TipoOrden.COCINA,
       );
     });
 
-    it('lanza error si la orden no es de tipo COCINA', async () => {
-      const response = mockResponse({ tipo: TipoOrden.CAFETERIA });
+    it('procesa una orden de tipo CAFETERIA y emite evento', async () => {
+      const response = mockResponse({
+        tipo: TipoOrden.CAFETERIA,
+        estadoGeneral: OrdenEstado.EN_PREPARACION,
+      });
       mockOrdenesService.marcarEnPreparacion.mockResolvedValue(response);
 
-      await expect(service.marcarEnPreparacion(ORDEN_ID, COCINERO_ID)).rejects.toThrow(
-        'La orden no es de tipo COCINA',
+      const resultado = await service.marcarEnPreparacion(ORDEN_ID, COCINERO_ID);
+
+      expect(resultado.estadoGeneral).toBe(OrdenEstado.EN_PREPARACION);
+      expect(mockGateway.emitirEstadoOrden).toHaveBeenCalledWith(
+        ORDEN_ID,
+        OrdenEstado.EN_PREPARACION,
+        'mesero-id',
+        { id: 'mesa-id', numero: 5 },
+        TipoOrden.CAFETERIA,
       );
-      expect(mockGateway.emitirEstadoOrden).not.toHaveBeenCalled();
     });
   });
 
@@ -117,17 +129,29 @@ describe('CocinaService', () => {
       expect(mockGateway.emitirEstadoOrden).toHaveBeenCalledWith(
         ORDEN_ID,
         OrdenEstado.LISTA,
+        'mesero-id',
+        { id: 'mesa-id', numero: 5 },
+        TipoOrden.COCINA,
       );
     });
 
-    it('lanza error si la orden no es de tipo COCINA', async () => {
-      const response = mockResponse({ tipo: TipoOrden.CAFETERIA });
+    it('procesa una orden de tipo CAFETERIA y emite evento', async () => {
+      const response = mockResponse({
+        tipo: TipoOrden.CAFETERIA,
+        estadoGeneral: OrdenEstado.LISTA,
+      });
       mockOrdenesService.marcarLista.mockResolvedValue(response);
 
-      await expect(service.marcarLista(ORDEN_ID)).rejects.toThrow(
-        'La orden no es de tipo COCINA',
+      const resultado = await service.marcarLista(ORDEN_ID);
+
+      expect(resultado.estadoGeneral).toBe(OrdenEstado.LISTA);
+      expect(mockGateway.emitirEstadoOrden).toHaveBeenCalledWith(
+        ORDEN_ID,
+        OrdenEstado.LISTA,
+        'mesero-id',
+        { id: 'mesa-id', numero: 5 },
+        TipoOrden.CAFETERIA,
       );
-      expect(mockGateway.emitirEstadoOrden).not.toHaveBeenCalled();
     });
   });
 });

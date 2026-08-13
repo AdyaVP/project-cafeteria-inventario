@@ -10,6 +10,7 @@ import {
   Model,
   Types,
 } from 'mongoose';
+import type { ClientSession } from 'mongoose';
 
 import {
   Receta,
@@ -65,13 +66,13 @@ export class RecetasService {
 
   async buscarPorProducto(
     productoId: string,
+    session?: ClientSession,
   ): Promise<RecetaResponse> {
     this.validarObjectId(productoId);
 
-    const receta =
-      await this.recetaModel.findOne({
-        productoId,
-      });
+    const receta = session
+      ? await this.recetaModel.findOne({ productoId }).session(session)
+      : await this.recetaModel.findOne({ productoId });
 
     if (!receta) {
       throw new NotFoundException(

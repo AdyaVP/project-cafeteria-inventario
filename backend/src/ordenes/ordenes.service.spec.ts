@@ -129,6 +129,14 @@ describe('OrdenesService', () => {
       findById: jest.fn(),
       create: jest.fn(),
       discriminators: {} as jest.Mock,
+      db: {
+        startSession: jest.fn().mockResolvedValue({
+          withTransaction: jest.fn(async (callback: () => Promise<void>) => {
+            await callback();
+          }),
+          endSession: jest.fn(),
+        }),
+      },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -184,8 +192,8 @@ describe('OrdenesService', () => {
       const docCafeteria = mockDoc({ _id: new Types.ObjectId(), tipo: TipoOrden.CAFETERIA });
 
       model.create
-        .mockResolvedValueOnce(docCocina)
-        .mockResolvedValueOnce(docCafeteria);
+        .mockResolvedValueOnce([docCocina])
+        .mockResolvedValueOnce([docCafeteria]);
 
       model.find = jest.fn().mockReturnValue(mockQuery([docCocina, docCafeteria]));
 
@@ -350,14 +358,13 @@ describe('OrdenesService', () => {
   });
 
   describe('obtenerColaCocina', () => {
-    it('retorna ordenes COCINA pendientes o en preparacion', async () => {
+    it('retorna ordenes COCINA y CAFETERIA pendientes o en preparacion', async () => {
       model.find = jest.fn().mockReturnValue(mockQuery([mockDoc(), mockDoc()]));
 
       const resultado = await service.obtenerColaCocina();
 
       expect(resultado).toHaveLength(2);
       expect(model.find).toHaveBeenCalledWith({
-        tipo: TipoOrden.COCINA,
         estadoGeneral: { $in: [OrdenEstado.PENDIENTE, OrdenEstado.EN_PREPARACION] },
       });
     });

@@ -10,6 +10,7 @@ import {
   Model,
   Types,
 } from 'mongoose';
+import type { ClientSession } from 'mongoose';
 
 import type {
   UpdateProductoDto,
@@ -90,11 +91,13 @@ export class ProductosService {
 
   async buscarPorId(
     id: string,
+    session?: ClientSession,
   ): Promise<ProductoDetalle> {
     this.validarObjectId(id);
 
-    const producto =
-      await this.productoModel.findById(id);
+    const producto = session
+      ? await this.productoModel.findById(id).session(session)
+      : await this.productoModel.findById(id);
 
     if (!producto) {
       throw new NotFoundException(

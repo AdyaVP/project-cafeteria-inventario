@@ -11,6 +11,7 @@ import {
   Model,
   Types,
 } from 'mongoose';
+import type { ClientSession } from 'mongoose';
 
 import {
   InventarioItem,
@@ -63,11 +64,13 @@ export class InventarioService {
 
   async buscarPorId(
     id: string,
+    session?: ClientSession,
   ): Promise<InventarioResponse> {
     this.validarObjectId(id);
 
-    const item =
-      await this.inventarioModel.findById(id);
+    const item = session
+      ? await this.inventarioModel.findById(id).session(session)
+      : await this.inventarioModel.findById(id);
 
     if (!item) {
       throw new NotFoundException(
@@ -136,16 +139,16 @@ export class InventarioService {
       inventarioItemId: string;
       cantidad: number;
     }[],
+    session?: ClientSession,
   ): Promise<void> {
     for (const ingrediente of ingredientes) {
       this.validarObjectId(
         ingrediente.inventarioItemId,
       );
 
-      const item =
-        await this.inventarioModel.findById(
-          ingrediente.inventarioItemId,
-        );
+      const item = session
+        ? await this.inventarioModel.findById(ingrediente.inventarioItemId).session(session)
+        : await this.inventarioModel.findById(ingrediente.inventarioItemId);
 
       if (!item) {
         throw new NotFoundException(
@@ -165,7 +168,11 @@ export class InventarioService {
       item.stockActual -=
         ingrediente.cantidad;
 
-      await item.save();
+      if (session) {
+        await item.save({ session });
+      } else {
+        await item.save();
+      }
     }
   }
 
