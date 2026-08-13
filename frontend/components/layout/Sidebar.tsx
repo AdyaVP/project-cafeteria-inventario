@@ -13,10 +13,13 @@ import {
   HelpCircle,
   Utensils,
   LogOut,
+  Users,
+  BookOpen,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { NAV_ITEMS } from '@/lib/constants'
 import { useAuth } from '@/lib/context/AuthContext'
+import { useToast } from '@/lib/context/ToastContext'
 import type { Usuario } from '@/lib/types'
 
 // Mapa de iconos — evita importación dinámica no type-safe
@@ -27,6 +30,8 @@ const ICON_MAP = {
   Receipt,
   Package,
   BarChart3,
+  Users,
+  BookOpen,
 } as const
 
 type IconName = keyof typeof ICON_MAP
@@ -38,11 +43,20 @@ interface SidebarProps {
 export function Sidebar({ usuario }: SidebarProps): React.JSX.Element {
   const pathname = usePathname()
   const { logout } = useAuth()
+  const { toast } = useToast()
   const router = useRouter()
 
   const handleLogout = async (): Promise<void> => {
-    await logout()
-    router.push('/login')
+    try {
+      await logout()
+      router.push('/login')
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'No fue posible cerrar la sesión'
+      )
+    }
   }
 
   // Filtrar items según roles del usuario
@@ -50,19 +64,17 @@ export function Sidebar({ usuario }: SidebarProps): React.JSX.Element {
     item.roles.some((rol) => usuario.roles.includes(rol))
   )
 
-  const puedeCrearOrden = usuario.roles.some((r) =>
-    ['ADMIN', 'MESERO'].includes(r)
-  )
+  const puedeCrearOrden = usuario.roles.includes('MESERO')
 
   return (
-    <aside className="flex h-full w-[220px] flex-shrink-0 flex-col border-r border-border-subtle bg-bg-surface">
+    <aside className="hidden h-full w-[220px] flex-shrink-0 flex-col border-r border-border-subtle bg-bg-surface lg:flex">
       {/* Logo */}
       <div className="p-4 pb-2">
         <div className="flex items-center gap-2">
           <Utensils size={20} className="text-accent" />
           <span className="text-lg font-bold text-text-primary">Comanda</span>
         </div>
-        <p className="mt-0.5 text-[10px] text-text-secondary">POS System</p>
+        <p className="mt-0.5 text-[10px] text-text-secondary">Punto de venta</p>
       </div>
 
       {/* New Order */}
@@ -70,9 +82,9 @@ export function Sidebar({ usuario }: SidebarProps): React.JSX.Element {
         <div className="px-3 pb-4 pt-2">
           <Link
             href="/mesas"
-            className="inline-flex h-8 w-full min-w-[44px] items-center justify-center gap-2 rounded-md bg-accent px-3 text-xs font-semibold text-white transition-colors hover:bg-accent-hover"
+            className="inline-flex min-h-[44px] w-full min-w-[44px] items-center justify-center gap-2 rounded-md bg-accent px-3 text-xs font-semibold text-white transition-colors hover:bg-accent-hover"
           >
-            + New Order
+            + Nueva orden
           </Link>
         </div>
       )}
@@ -89,6 +101,7 @@ export function Sidebar({ usuario }: SidebarProps): React.JSX.Element {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
                   className={clsx(
                     'flex min-h-[44px] items-center gap-3 rounded-md px-3',
                     'text-sm transition-colors',
@@ -124,7 +137,7 @@ export function Sidebar({ usuario }: SidebarProps): React.JSX.Element {
               className="flex min-h-[44px] items-center gap-3 rounded-md px-3 text-sm text-text-secondary hover:bg-bg-elevated hover:text-text-primary"
             >
               <Settings size={16} />
-              <span>Settings</span>
+              <span>Configuración</span>
             </Link>
           </li>
           <li>
@@ -133,7 +146,7 @@ export function Sidebar({ usuario }: SidebarProps): React.JSX.Element {
               className="flex min-h-[44px] items-center gap-3 rounded-md px-3 text-sm text-text-secondary hover:bg-bg-elevated hover:text-text-primary"
             >
               <HelpCircle size={16} />
-              <span>Support</span>
+              <span>Soporte</span>
             </Link>
           </li>
         </ul>

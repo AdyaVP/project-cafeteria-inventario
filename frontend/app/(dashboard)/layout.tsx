@@ -1,10 +1,15 @@
 import type { ReactNode } from 'react'
 import { AppLayout } from '@/components/layout/AppLayout'
+import { ReadyOrdersProvider } from '@/lib/context/ReadyOrdersContext'
 interface DashboardLayoutProps {
   children: ReactNode
 }
 export default function DashboardLayout({
   children,
 }: DashboardLayoutProps): React.JSX.Element {
-  return <AppLayout>{children}</AppLayout>
+  return (
+    <ReadyOrdersProvider>
+      <AppLayout>{children}</AppLayout>
+    </ReadyOrdersProvider>
+  )
 }

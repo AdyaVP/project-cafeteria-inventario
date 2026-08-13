@@ -15,16 +15,16 @@ const styles: Record<BadgeVariant, { wrapper: string; dot: string }> = {
     dot: 'bg-state-success',
   },
   ocupada: {
-    wrapper: 'text-state-error bg-state-error/10',
-    dot: 'bg-state-error',
+    wrapper: 'text-state-warning bg-state-warning/10',
+    dot: 'bg-state-warning',
   },
   error: {
     wrapper: 'text-state-error bg-state-error/10',
     dot: 'bg-state-error',
   },
   'cuenta-pedida': {
-    wrapper: 'text-state-warning bg-state-warning/10',
-    dot: 'bg-state-warning',
+    wrapper: 'text-accent bg-accent/10',
+    dot: 'bg-accent',
   },
   warning: {
     wrapper: 'text-state-warning bg-state-warning/10',

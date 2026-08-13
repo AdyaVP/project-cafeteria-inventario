@@ -5,6 +5,10 @@ export type TipoOrden = 'COCINA' | 'CAFETERIA'
 export type EstadoItem = 'PENDIENTE' | 'EN_PREPARACION' | 'LISTO' | 'ENTREGADO'
 export type MetodoPago = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA'
 export type PeriodoReporte = 'today' | 'week' | 'month'
+export type ProductoTipo = 'COMIDA' | 'BEBIDA'
+export type TemperaturaProducto = 'FRIA' | 'CALIENTE' | 'AMBIENTE'
+export type UnidadInventario = 'KG' | 'GR' | 'LT' | 'ML' | 'UNIDAD'
+export type OperacionStock = 'AGREGAR' | 'DESCONTAR'
 export type BadgeVariant =
   | 'libre'
   | 'ocupada'
@@ -32,14 +36,48 @@ export interface AuthLoginResponse {
   user: Usuario
   message: string
 }
-export interface Producto {
+export interface ProductoBase {
   id: string
   nombre: string
   descripcion?: string
   precio: number
   disponible: boolean
   imagenUrl?: string
-  tipo: 'COMIDA' | 'BEBIDA'
+  tipo: ProductoTipo
+}
+export interface ProductoComida extends ProductoBase {
+  tipo: 'COMIDA'
+  tiempoPreparacionMin: number
+  calorias?: number
+  alergenos: string[]
+}
+export interface TamanoProducto {
+  nombre: string
+  precioAdicional: number
+}
+export interface ProductoBebida extends ProductoBase {
+  tipo: 'BEBIDA'
+  temperatura: TemperaturaProducto
+  tamanosDisponibles: TamanoProducto[]
+}
+export type Producto = ProductoComida | ProductoBebida
+export interface InventarioItem {
+  id: string
+  nombre: string
+  unidad: UnidadInventario
+  stockActual: number
+  stockMinimo: number
+  costoUnitario: number
+  activo: boolean
+}
+export interface IngredienteReceta {
+  inventarioItemId: string
+  cantidad: number
+}
+export interface Receta {
+  id: string
+  productoId: string
+  ingredientes: IngredienteReceta[]
 }
 export interface Mesa {
   id: string
@@ -49,6 +87,10 @@ export interface Mesa {
   meseroActual?: { id: string; nombre: string }
   abiertaEn?: string
   cerradaEn?: string
+}
+export interface CrearMesaDto {
+  numero: number
+  capacidad: number
 }
 export interface MesaResumen {
   id: string
@@ -109,7 +151,7 @@ export interface ApiResponse<T> {
 export interface ApiError {
   success: false
   statusCode: number
-  message: string
+  message: string | string[]
   timestamp: string
   path: string
 }
@@ -131,13 +173,65 @@ export interface CrearOrdenDto {
   mesaId: string
   items: Array<{ productoId: string; cantidad: number; notas?: string }>
 }
+export interface CrearUsuarioDto {
+  nombre: string
+  email: string
+  password: string
+  roles: Role[]
+}
+export interface ActualizarRolesUsuarioDto {
+  roles: Role[]
+}
+export interface CrearInventarioItemDto {
+  nombre: string
+  unidad: UnidadInventario
+  stockActual: number
+  stockMinimo: number
+  costoUnitario: number
+  activo?: boolean
+}
+export interface AjustarStockDto {
+  cantidad: number
+  operacion: OperacionStock
+}
+interface CrearProductoBaseDto {
+  nombre: string
+  descripcion?: string
+  precio: number
+  disponible?: boolean
+  imagenUrl?: string
+}
+export interface CrearProductoComidaDto extends CrearProductoBaseDto {
+  tipo: 'COMIDA'
+  tiempoPreparacionMin: number
+  calorias?: number
+  alergenos: string[]
+}
+export interface CrearProductoBebidaDto extends CrearProductoBaseDto {
+  tipo: 'BEBIDA'
+  temperatura: TemperaturaProducto
+  tamanosDisponibles: TamanoProducto[]
+}
+export type CrearProductoDto = CrearProductoComidaDto | CrearProductoBebidaDto
+export interface ActualizarProductoDto {
+  nombre?: string
+  descripcion?: string
+  precio?: number
+  disponible?: boolean
+  imagenUrl?: string
+}
+export interface CrearRecetaDto {
+  productoId: string
+  ingredientes: IngredienteReceta[]
+}
+export interface ActualizarRecetaDto {
+  ingredientes: IngredienteReceta[]
+}
 export interface EmitirFacturaDto {
   mesaId: string
   metodoPago: MetodoPago
   rtn?: string
-  razonSocial?: string
   cai?: string
-  montoRecibido?: number
 }
 export interface NavItem {
   label: string

@@ -36,7 +36,7 @@ export function ToastContainer(): React.JSX.Element {
   return (
     <div
       aria-live="polite"
-      className="fixed bottom-6 right-6 z-50 flex flex-col gap-2"
+      className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-4 right-4 z-50 flex flex-col gap-2 lg:bottom-6 lg:left-auto lg:right-6"
     >
       {toasts.map((toast) => {
         const { border, icon, Icon } = appearances[toast.type]
@@ -44,7 +44,7 @@ export function ToastContainer(): React.JSX.Element {
           <div
             key={toast.id}
             className={clsx(
-              'relative w-[320px] translate-x-0 overflow-hidden rounded-lg border bg-bg-overlay p-3 opacity-100 shadow-lg transition-all duration-300',
+              'relative w-full translate-x-0 overflow-hidden rounded-lg border bg-bg-overlay p-3 opacity-100 shadow-lg transition-all duration-300 lg:w-[320px]',
               border
             )}
           >
@@ -54,6 +54,7 @@ export function ToastContainer(): React.JSX.Element {
                 {toast.message}
               </p>
               <button
+                type="button"
                 aria-label="Cerrar notificación"
                 className="min-h-[44px] min-w-[44px] -m-3 flex items-center justify-center text-text-disabled hover:text-text-primary"
                 onClick={() => dismiss(toast.id)}

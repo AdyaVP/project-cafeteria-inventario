@@ -25,8 +25,8 @@ export const ESTADO_MESA_LABELS: Record<EstadoMesa, string> = {
 }
 export const ESTADO_MESA_BORDER: Record<EstadoMesa, string> = {
   LIBRE: 'border-t-state-success',
-  OCUPADA: 'border-t-state-error',
-  CUENTA_PEDIDA: 'border-t-state-warning',
+  OCUPADA: 'border-t-state-warning',
+  CUENTA_PEDIDA: 'border-t-accent',
   CERRADA: 'border-t-border-subtle',
 }
 export const ESTADO_MESA_BADGE: Record<
@@ -49,31 +49,43 @@ export function getRolDefaultRoute(roles: Role[]): string {
 
 export const NAV_ITEMS: NavItem[] = [
   {
-    label: 'Dashboard',
+    label: 'Panel',
     href: DASHBOARD_ROUTE,
     icon: 'LayoutDashboard',
     roles: ['ADMIN'],
   },
   {
-    label: 'Tables',
+    label: 'Mesas',
     href: '/mesas',
     icon: 'UtensilsCrossed',
     roles: ['ADMIN', 'MESERO', 'CAJERO'],
   },
   {
-    label: 'Billing',
+    label: 'Facturación',
     href: '/facturacion',
     icon: 'Receipt',
-    roles: ['ADMIN', 'CAJERO'],
+    roles: ['CAJERO'],
   },
   {
-    label: 'Inventory',
+    label: 'Usuarios',
+    href: '/usuarios',
+    icon: 'Users',
+    roles: ['ADMIN'],
+  },
+  {
+    label: 'Menú',
+    href: '/menu',
+    icon: 'BookOpen',
+    roles: ['ADMIN'],
+  },
+  {
+    label: 'Inventario',
     href: '/inventario',
     icon: 'Package',
     roles: ['ADMIN'],
   },
   {
-    label: 'Reports',
+    label: 'Reportes',
     href: '/reportes',
     icon: 'BarChart3',
     roles: ['ADMIN'],

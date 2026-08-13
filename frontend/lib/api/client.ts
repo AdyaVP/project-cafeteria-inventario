@@ -32,6 +32,10 @@ export async function apiFetch<T>(
     },
   })
 
+  if (response.status === 204 && response.ok) {
+    return undefined as T
+  }
+
   // Intentar parsear el body siempre
   let body: unknown
   try {
@@ -46,10 +50,20 @@ export async function apiFetch<T>(
 
   // Si la respuesta no es ok, extraer el mensaje de error
   if (!response.ok) {
-    const errorBody = body as Partial<ApiError>
+    const errorBody = body as Partial<Omit<ApiError, 'message'>> & {
+      message?: unknown
+    }
+    const rawMessage = errorBody.message
+    const message = Array.isArray(rawMessage)
+      ? rawMessage
+          .filter((item): item is string => typeof item === 'string')
+          .join(', ')
+      : typeof rawMessage === 'string'
+        ? rawMessage
+        : `Error ${response.status}`
     throw new ApiClientError(
       errorBody.statusCode ?? response.status,
-      errorBody.message ?? `Error ${response.status}`,
+      message,
       errorBody.path ?? endpoint
     )
   }

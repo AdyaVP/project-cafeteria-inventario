@@ -32,14 +32,44 @@ export const MesaSchema = z.object({
     .transform((value) => value ?? undefined),
 })
 const MesaResumenSchema = z.object({ id: z.string(), numero: z.number() })
-export const ProductoSchema = z.object({
+const ProductoBaseSchema = z.object({
   id: z.string(),
   nombre: z.string(),
   precio: z.number(),
   disponible: z.boolean(),
-  tipo: z.enum(['COMIDA', 'BEBIDA']),
   descripcion: z.string().optional(),
   imagenUrl: z.string().optional(),
+})
+export const ProductoSchema = z.discriminatedUnion('tipo', [
+  ProductoBaseSchema.extend({
+    tipo: z.literal('COMIDA'),
+    tiempoPreparacionMin: z.number(),
+    calorias: z.number().optional(),
+    alergenos: z.array(z.string()),
+  }),
+  ProductoBaseSchema.extend({
+    tipo: z.literal('BEBIDA'),
+    temperatura: z.enum(['FRIA', 'CALIENTE', 'AMBIENTE']),
+    tamanosDisponibles: z.array(
+      z.object({ nombre: z.string(), precioAdicional: z.number() })
+    ),
+  }),
+])
+export const InventarioItemSchema = z.object({
+  id: z.string(),
+  nombre: z.string(),
+  unidad: z.enum(['KG', 'GR', 'LT', 'ML', 'UNIDAD']),
+  stockActual: z.number(),
+  stockMinimo: z.number(),
+  costoUnitario: z.number(),
+  activo: z.boolean(),
+})
+export const RecetaSchema = z.object({
+  id: z.string(),
+  productoId: z.string(),
+  ingredientes: z.array(
+    z.object({ inventarioItemId: z.string(), cantidad: z.number() })
+  ),
 })
 export const ItemFacturaSchema = z.object({
   nombre: z.string(),

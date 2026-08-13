@@ -2,9 +2,14 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import clsx from 'clsx'
 import { useAuth } from '@/lib/context/AuthContext'
+import { usePreferences } from '@/lib/context/PreferencesContext'
 import { Spinner } from '@/components/ui/Spinner'
+import { NAV_ITEMS } from '@/lib/constants'
 import { Sidebar } from './Sidebar'
+import { BottomNav } from './BottomNav'
+import { ReadyOrdersStatus } from './ReadyOrdersStatus'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -12,6 +17,7 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
   const { usuario, loading } = useAuth()
+  const { preferences } = usePreferences()
   const router = useRouter()
 
   useEffect(() => {
@@ -39,10 +45,23 @@ export function AppLayout({ children }: AppLayoutProps): React.JSX.Element {
     )
   }
 
+  const itemsVisibles = NAV_ITEMS.filter((item) =>
+    item.roles.some((rol) => usuario.roles.includes(rol))
+  )
+
   return (
-    <div className="flex h-screen overflow-hidden bg-bg-base">
+    <div className="flex h-dvh overflow-hidden bg-bg-base">
       <Sidebar usuario={usuario} />
-      <main className="flex-1 overflow-auto p-6">{children}</main>
+      <main
+        className={clsx(
+          'min-w-0 flex-1 overflow-auto pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6',
+          preferences.vistaCompacta ? 'p-3 md:p-4' : 'p-4 md:p-6'
+        )}
+      >
+        <ReadyOrdersStatus />
+        {children}
+      </main>
+      <BottomNav navItems={itemsVisibles} />
     </div>
   )
 }
