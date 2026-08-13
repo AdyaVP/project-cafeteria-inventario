@@ -13,11 +13,13 @@ import { Card } from './Card'
 interface MesaCardProps {
   mesa: Mesa
   selected?: boolean
+  readyOrders?: number
   onClick: () => void
 }
 export function MesaCard({
   mesa,
   selected = false,
+  readyOrders = 0,
   onClick,
 }: MesaCardProps): React.JSX.Element {
   const timer = useTimer(mesa.abiertaEn)
@@ -43,6 +45,16 @@ export function MesaCard({
         </span>
         <span>{timer}</span>
       </div>
+      {readyOrders > 0 && (
+        <div
+          role="status"
+          className="mt-3 rounded-md border border-state-success/40 bg-state-success/10 px-2 py-1.5 text-xs font-semibold text-state-success"
+        >
+          {readyOrders === 1
+            ? '1 orden lista para entregar'
+            : `${readyOrders} órdenes listas para entregar`}
+        </div>
+      )}
     </Card>
   )
 }

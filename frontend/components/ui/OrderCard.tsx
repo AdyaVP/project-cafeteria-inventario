@@ -3,14 +3,27 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import clsx from 'clsx'
 import { useTimer } from '@/lib/hooks/useTimer'
-import type { Orden } from '@/lib/types'
+import type { BadgeVariant, Orden, TipoOrden } from '@/lib/types'
+import { Badge } from './Badge'
 import { Button } from './Button'
+
+const TIPO_ORDEN_LABELS: Record<TipoOrden, string> = {
+  COCINA: 'Comida',
+  CAFETERIA: 'Bebida',
+}
+
+const TIPO_ORDEN_BADGE: Record<TipoOrden, BadgeVariant> = {
+  COCINA: 'warning',
+  CAFETERIA: 'info',
+}
+
 interface OrderCardProps {
   orden: Orden
   onAction?: (ordenId: string) => void
   actionLabel?: string
   actionVariant?: 'primary' | 'secondary' | 'ghost'
   showTimer?: boolean
+  loading?: boolean
 }
 export function OrderCard({
   orden,
@@ -18,6 +31,7 @@ export function OrderCard({
   actionLabel,
   actionVariant = 'primary',
   showTimer = true,
+  loading = false,
 }: OrderCardProps): React.JSX.Element {
   const timer = useTimer(orden.createdAt)
   const [overdue, setOverdue] = useState(false)
@@ -41,7 +55,13 @@ export function OrderCard({
   return (
     <article className="rounded-lg border border-border-subtle bg-bg-surface p-4">
       <header className="flex items-center justify-between">
-        <h3 className="font-semibold">{mesa}</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-semibold">{mesa}</h3>
+          <Badge
+            variant={TIPO_ORDEN_BADGE[orden.tipo]}
+            label={TIPO_ORDEN_LABELS[orden.tipo]}
+          />
+        </div>
         {showTimer && (
           <span
             className={clsx(
@@ -59,13 +79,27 @@ export function OrderCard({
       <p className="mt-1 text-sm text-text-secondary">
         Ticket #{orden.id.slice(-6)}
       </p>
-      <ul className="my-3 space-y-1">
+      {orden.tiempoEstimadoMin !== undefined && (
+        <p className="mt-1 text-xs text-text-secondary">
+          Estimado: {orden.tiempoEstimadoMin} min
+        </p>
+      )}
+      <ul className="my-3 space-y-2">
         {orden.items.map((item, index) => (
           <li key={`${orden.id}-${index}`} className="text-sm">
-            <span className="mr-2 font-bold text-accent">{item.cantidad}x</span>
-            {typeof item.producto === 'string'
-              ? item.producto
-              : item.producto.nombre}
+            <p>
+              <span className="mr-2 font-bold text-accent">
+                {item.cantidad}x
+              </span>
+              {typeof item.producto === 'string'
+                ? item.producto
+                : item.producto.nombre}
+            </p>
+            {item.notas && (
+              <p className="mt-1 rounded bg-state-warning/10 px-2 py-1 text-xs text-state-warning">
+                Nota: {item.notas}
+              </p>
+            )}
           </li>
         ))}
       </ul>
@@ -79,6 +113,7 @@ export function OrderCard({
         <Button
           fullWidth
           variant={actionVariant}
+          loading={loading}
           onClick={() => onAction(orden.id)}
         >
           {actionLabel}

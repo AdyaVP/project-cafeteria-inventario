@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Socket } from 'socket.io-client'
 import { ApiClientError } from '../api/client'
 import { mesasApi } from '../api/mesas'
@@ -20,33 +20,59 @@ export function useMesas(socket?: Socket | null): UseMesasReturn {
   const [mesas, setMesas] = useState<Mesa[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const load = useCallback(async (signal?: AbortSignal): Promise<void> => {
-    try {
-      setLoading(true)
-      setError(null)
-      setMesas(await mesasApi.getMesas({ signal }))
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') return
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : 'Error inesperado al cargar las mesas'
-      )
-    } finally {
-      if (!signal?.aborted) setLoading(false)
-    }
-  }, [])
+  const loadSequenceRef = useRef(0)
+  const loadControllerRef = useRef<AbortController | null>(null)
+  const hasLoadedRef = useRef(false)
+  const load = useCallback(
+    async (signal?: AbortSignal, silent = false): Promise<void> => {
+      loadControllerRef.current?.abort()
+      const controller = signal ? null : new AbortController()
+      loadControllerRef.current = controller
+      const requestSignal = signal ?? controller?.signal
+      const sequence = loadSequenceRef.current + 1
+      loadSequenceRef.current = sequence
+      try {
+        if (!silent) setLoading(true)
+        if (!silent) setError(null)
+        const next = await mesasApi.getMesas({ signal: requestSignal })
+        if (loadSequenceRef.current === sequence) {
+          setMesas(next)
+          hasLoadedRef.current = true
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        if (
+          (!silent || !hasLoadedRef.current) &&
+          loadSequenceRef.current === sequence
+        ) {
+          setError(
+            err instanceof ApiClientError
+              ? err.message
+              : 'Error inesperado al cargar las mesas'
+          )
+        }
+      } finally {
+        if (!requestSignal?.aborted && loadSequenceRef.current === sequence) {
+          setLoading(false)
+        }
+      }
+    },
+    []
+  )
   useEffect(() => {
     const controller = new AbortController()
     void load(controller.signal)
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      loadControllerRef.current?.abort()
+    }
   }, [load])
   useEffect(() => {
     if (!socket) return
-    const update = (mesa: Mesa): void =>
-      setMesas((current) =>
-        current.map((item) => (item.id === mesa.id ? mesa : item))
-      )
+    const update = (mesa: Mesa): void => {
+      void mesa
+      void load(undefined, true)
+    }
     const handleMesaActualizada = (
       payload: Mesa | MesaActualizadaEvent
     ): void => {
@@ -57,10 +83,15 @@ export function useMesas(socket?: Socket | null): UseMesasReturn {
       void mesasApi
         .getMesa(payload.mesaId)
         .then(update)
-        .catch(() => load())
+        .catch(() => load(undefined, true))
     }
+    const syncAfterReconnect = (): void => {
+      void load(undefined, true)
+    }
+    socket.on(WS_EVENTS.connect, syncAfterReconnect)
     socket.on(WS_EVENTS.mesaActualizada, handleMesaActualizada)
     return () => {
+      socket.off(WS_EVENTS.connect, syncAfterReconnect)
       socket.off(WS_EVENTS.mesaActualizada, handleMesaActualizada)
     }
   }, [load, socket])
@@ -83,7 +114,14 @@ export function useMesas(socket?: Socket | null): UseMesasReturn {
           current.map((mesa) => (mesa.id === updated.id ? updated : mesa))
         )
       } catch (err: unknown) {
-        setMesas(previous)
+        // Una carrera puede haber sido resuelta por otro cliente mientras
+        // llega este error. Releer evita pisar un evento WS más reciente.
+        try {
+          const authoritative = await mesasApi.getMesas()
+          setMesas(authoritative)
+        } catch {
+          setMesas(previous)
+        }
         throw err
       }
     },

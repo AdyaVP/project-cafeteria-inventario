@@ -4,14 +4,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Plus } from 'lucide-react'
 import clsx from 'clsx'
+import { z } from 'zod'
 import { Button } from '@/components/ui/Button'
 import { DataError } from '@/components/ui/DataError'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PriceDisplay } from '@/components/ui/PriceDisplay'
+import { useAuth } from '@/lib/context/AuthContext'
 import { useToast } from '@/lib/context/ToastContext'
 import { useMesas } from '@/lib/hooks/useMesas'
 import { useOrdenes } from '@/lib/hooks/useOrdenes'
 import { useProductos } from '@/lib/hooks/useProductos'
+import { useRolGuard } from '@/lib/hooks/useRolGuard'
 import type { ItemCarrito, Producto } from '@/lib/types'
 
 type MenuTab = 'todo' | 'comida' | 'bebida'
@@ -21,10 +24,32 @@ const tabs: Array<{ value: MenuTab; label: string }> = [
   { value: 'bebida', label: 'Bebida' },
 ]
 
-export default function NuevaOrdenPage(): React.JSX.Element {
+const NuevaOrdenSchema = z.object({
+  mesaId: z.string().min(1, 'La mesa es requerida'),
+  items: z
+    .array(
+      z.object({
+        productoId: z.string().min(1, 'El producto es requerido'),
+        cantidad: z.number().int().positive('La cantidad debe ser positiva'),
+        notas: z.string().trim().optional(),
+      })
+    )
+    .min(1, 'Agrega al menos un producto a la orden'),
+})
+
+export default function NuevaOrdenPage(): React.JSX.Element | null {
+  const { autorizado, loading } = useRolGuard(['MESERO'])
+
+  if (loading || !autorizado) return null
+
+  return <NuevaOrdenContent />
+}
+
+function NuevaOrdenContent(): React.JSX.Element {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const { toast } = useToast()
+  const { usuario } = useAuth()
   const {
     productos,
     comida,
@@ -97,18 +122,25 @@ export default function NuevaOrdenPage(): React.JSX.Element {
     )
 
   const enviarOrden = async (): Promise<void> => {
-    if (!mesa || carrito.length === 0) return
+    if (!mesa) return
+
+    const result = NuevaOrdenSchema.safeParse({
+      mesaId: mesa.id,
+      items: carrito.map((item) => ({
+        productoId: item.productoId,
+        cantidad: item.cantidad,
+        notas: item.notas || undefined,
+      })),
+    })
+    if (!result.success) {
+      toast.error(result.error.issues[0]?.message ?? 'Revisa la orden')
+      return
+    }
+
     setEnviando(true)
     try {
-      await crearOrden({
-        mesaId: mesa.id,
-        items: carrito.map((item) => ({
-          productoId: item.productoId,
-          cantidad: item.cantidad,
-          notas: item.notas || undefined,
-        })),
-      })
-      toast.success('Orden enviada a cocina')
+      await crearOrden(result.data)
+      toast.success('Orden enviada a preparación')
       router.push('/mesas')
     } catch (err: unknown) {
       toast.error(
@@ -133,13 +165,27 @@ export default function NuevaOrdenPage(): React.JSX.Element {
         description="La mesa solicitada no existe o ya no está disponible"
       />
     )
+  if (mesa.estado !== 'OCUPADA')
+    return (
+      <EmptyState
+        title="Mesa no disponible para ordenar"
+        description="La mesa debe estar abierta antes de tomar una orden."
+      />
+    )
+  if (mesa.meseroActual?.id !== usuario?.id)
+    return (
+      <EmptyState
+        title="Mesa asignada a otro mesero"
+        description={`La mesa ${mesa.numero} está asignada a ${mesa.meseroActual?.nombre ?? 'otro mesero'}.`}
+      />
+    )
 
   return (
     <div className="flex h-full flex-col">
       <p className="mb-2 text-[11px] text-text-secondary">
         Mesas / Mesa {mesa.numero} / Nueva Orden
       </p>
-      <header className="mb-6 flex items-center justify-between">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Nueva Orden — Mesa {mesa.numero}</h1>
         <Button variant="ghost" onClick={() => router.push('/mesas')}>
           Cancelar
@@ -147,10 +193,12 @@ export default function NuevaOrdenPage(): React.JSX.Element {
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
         <section className="flex min-w-0 flex-1 flex-col">
-          <nav className="flex gap-5">
+          <nav aria-label="Categorías del menú" className="flex gap-5">
             {tabs.map((item) => (
               <button
                 key={item.value}
+                type="button"
+                aria-pressed={tab === item.value}
                 className={clsx(
                   'min-h-[44px] pb-1 text-sm',
                   tab === item.value
@@ -172,6 +220,8 @@ export default function NuevaOrdenPage(): React.JSX.Element {
                 return (
                   <button
                     key={producto.id}
+                    type="button"
+                    aria-pressed={Boolean(selected)}
                     className="relative min-h-24 rounded-lg border border-border-subtle bg-bg-surface p-3 text-left hover:border-border-default"
                     onClick={() => agregarAlCarrito(producto)}
                   >
@@ -270,7 +320,7 @@ export default function NuevaOrdenPage(): React.JSX.Element {
             loading={enviando}
             onClick={() => void enviarOrden()}
           >
-            ▶ Enviar Orden a Cocina
+            ▶ Enviar Orden
           </Button>
         </aside>
       </div>

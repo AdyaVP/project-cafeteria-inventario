@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Socket } from 'socket.io-client'
 import { cocinaApi } from '../api/cocina'
 import { ApiClientError } from '../api/client'
@@ -19,35 +19,64 @@ export function useCola(socket?: Socket | null): UseColaReturn {
   const [ordenes, setOrdenes] = useState<Orden[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const load = useCallback(async (signal?: AbortSignal): Promise<void> => {
-    try {
-      setLoading(true)
-      setError(null)
-      setOrdenes(await cocinaApi.getCola({ signal }))
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') return
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : 'Error inesperado al cargar la cola'
-      )
-    } finally {
-      if (!signal?.aborted) setLoading(false)
-    }
-  }, [])
+  const loadSequenceRef = useRef(0)
+  const loadControllerRef = useRef<AbortController | null>(null)
+  const hasLoadedRef = useRef(false)
+  const load = useCallback(
+    async (signal?: AbortSignal, silent = false): Promise<void> => {
+      loadControllerRef.current?.abort()
+      const controller = signal ? null : new AbortController()
+      loadControllerRef.current = controller
+      const requestSignal = signal ?? controller?.signal
+      const sequence = loadSequenceRef.current + 1
+      loadSequenceRef.current = sequence
+      try {
+        if (!silent) setLoading(true)
+        if (!silent) setError(null)
+        const next = await cocinaApi.getCola({ signal: requestSignal })
+        if (loadSequenceRef.current === sequence) {
+          setOrdenes(next)
+          hasLoadedRef.current = true
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        if (
+          (!silent || !hasLoadedRef.current) &&
+          loadSequenceRef.current === sequence
+        ) {
+          setError(
+            err instanceof ApiClientError
+              ? err.message
+              : 'Error inesperado al cargar la cola'
+          )
+        }
+      } finally {
+        if (!requestSignal?.aborted && loadSequenceRef.current === sequence) {
+          setLoading(false)
+        }
+      }
+    },
+    []
+  )
   useEffect(() => {
     const controller = new AbortController()
     void load(controller.signal)
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      loadControllerRef.current?.abort()
+    }
   }, [load])
   useEffect(() => {
     if (!socket) return
     const sync = (): void => {
-      void load()
+      // Los eventos en tiempo real actualizan la cola sin desmontar el kanban.
+      void load(undefined, true)
     }
+    socket.on(WS_EVENTS.connect, sync)
     socket.on(WS_EVENTS.nuevaOrden, sync)
     socket.on(WS_EVENTS.ordenActualizada, sync)
     return () => {
+      socket.off(WS_EVENTS.connect, sync)
       socket.off(WS_EVENTS.nuevaOrden, sync)
       socket.off(WS_EVENTS.ordenActualizada, sync)
     }
@@ -71,7 +100,12 @@ export function useCola(socket?: Socket | null): UseColaReturn {
           current.map((orden) => (orden.id === updated.id ? updated : orden))
         )
       } catch (err: unknown) {
-        setOrdenes(previous)
+        try {
+          const authoritative = await cocinaApi.getCola()
+          setOrdenes(authoritative)
+        } catch {
+          setOrdenes(previous)
+        }
         throw err
       }
     },
