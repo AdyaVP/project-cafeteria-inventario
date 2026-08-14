@@ -136,3 +136,9 @@ export const FacturaSchema = z.object({
   rtn: z.string().optional(),
   fechaEmision: z.string(),
 })
+export const FacturaDetalleSchema = FacturaSchema.extend({
+  mesa: z.union([z.string(), z.object({ numero: z.number() })]),
+  cajero: z.union([z.string(), z.object({ nombre: z.string() })]),
+  razonSocial: z.string().optional(),
+  createdAt: z.string(),
+})

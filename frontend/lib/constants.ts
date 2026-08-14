@@ -9,6 +9,19 @@ export const TOAST_DURATION_MS = 4000
 export const MAX_TOASTS = 4
 export const WS_NAMESPACE = '/cocina'
 export const AUTH_SESSION_REVALIDATE_EVENT = 'auth-session-revalidate'
+export const WHATSAPP_WEB_URL = 'https://web.whatsapp.com/' as const
+export const NEGOCIO = {
+  nombre: 'Comanda Cafetería',
+  rtn: '05019999123456',
+  direccion: 'Tegucigalpa, Honduras',
+  telefono: '+504 2222-3333',
+  email: 'contacto@comanda.hn',
+  cai: 'A1B2C3-D4E5F6-G7H8I9-J0K1L2-M3N4O5-P6',
+  rangoDesde: '000-001-01-00000001',
+  rangoHasta: '000-001-01-00099999',
+  fechaLimiteCai: '31/12/2026',
+  prefijoFactura: '000-001-01-',
+} as const
 export const WS_EVENTS = {
   connect: 'connect',
   disconnect: 'disconnect',

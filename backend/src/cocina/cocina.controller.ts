@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Get,
-  Param,
-  Patch,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
 
 import { Role } from '../common/constants/roles.enum.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
@@ -22,7 +16,7 @@ export class CocinaController {
   constructor(private readonly cocinaService: CocinaService) {}
 
   @Get('cola')
-  @Roles(Role.COCINA)
+  @Roles(Role.COCINA, Role.ADMIN)
   async obtenerCola(): Promise<OrdenCocinaResponse[]> {
     return this.cocinaService.obtenerColaActual();
   }

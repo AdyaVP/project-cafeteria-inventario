@@ -31,7 +31,7 @@ const NuevaOrdenSchema = z.object({
       z.object({
         productoId: z.string().min(1, 'El producto es requerido'),
         cantidad: z.number().int().positive('La cantidad debe ser positiva'),
-        notas: z.string().trim().optional(),
+        notas: z.string().trim().max(50).optional(),
       })
     )
     .min(1, 'Agrega al menos un producto a la orden'),
@@ -294,15 +294,31 @@ function NuevaOrdenContent(): React.JSX.Element {
                       +
                     </Button>
                   </div>
-                  <input
-                    aria-label={`Nota para ${item.nombre}`}
-                    placeholder="Nota para cocina..."
-                    className="w-full border-b border-border-subtle bg-transparent py-1 text-sm text-text-primary placeholder:text-text-disabled focus:border-accent focus:outline-none"
-                    value={item.notas}
-                    onChange={(event) =>
-                      updateNotes(item.productoId, event.target.value)
-                    }
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      maxLength={50}
+                      aria-label={`Nota para ${item.nombre}`}
+                      placeholder="Nota para cocina..."
+                      className="w-full border-b border-border-subtle bg-transparent py-1 pr-12 text-sm text-text-primary placeholder:text-text-disabled focus:border-accent focus:outline-none"
+                      value={item.notas}
+                      onChange={(event) =>
+                        updateNotes(item.productoId, event.target.value)
+                      }
+                    />
+                    <span
+                      className={clsx(
+                        'absolute bottom-1 right-0 text-[10px]',
+                        item.notas.length >= 50
+                          ? 'text-state-error'
+                          : item.notas.length >= 45
+                            ? 'text-state-warning'
+                            : 'text-text-disabled'
+                      )}
+                    >
+                      {item.notas.length}/50
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>

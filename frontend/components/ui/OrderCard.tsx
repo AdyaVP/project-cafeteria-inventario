@@ -96,7 +96,7 @@ export function OrderCard({
                 : item.producto.nombre}
             </p>
             {item.notas && (
-              <p className="mt-1 rounded bg-state-warning/10 px-2 py-1 text-xs text-state-warning">
+              <p className="mt-1 line-clamp-2 break-words rounded bg-state-warning/10 px-2 py-1 text-xs text-state-warning">
                 Nota: {item.notas}
               </p>
             )}
@@ -106,7 +106,7 @@ export function OrderCard({
       {orden.notaChef && (
         <div className="mb-3 flex gap-2 rounded bg-bg-overlay p-2 text-sm italic text-state-warning">
           <AlertTriangle size={16} className="shrink-0" />
-          {orden.notaChef}
+          <p className="line-clamp-2 break-words">{orden.notaChef}</p>
         </div>
       )}
       {actionLabel && onAction && (

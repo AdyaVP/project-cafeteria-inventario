@@ -94,16 +94,22 @@ export class CocinaGateway implements OnGatewayConnection, OnGatewayDisconnect {
   manejarAutorizacionUsuarioCambiada(
     payload: UsuarioAutorizacionCambiadaPayload,
   ): void {
+    if (!this.server) return;
+
     this.server.in(`user:${payload.usuarioId}`).disconnectSockets(true);
   }
 
   @OnEvent(EVENTO_ORDEN_CREADA)
   manejarOrdenCreada(payload: OrdenCreadaPayload): void {
+    if (!this.server) return;
+
     this.server.to(SALA_COCINA).emit(EVENTO_WS_NUEVA_ORDEN, payload);
   }
 
   @OnEvent(EVENTO_MESA_ESTADO_CAMBIADO)
   manejarMesaCambiada(payload: MesaCambiadaPayload): void {
+    if (!this.server) return;
+
     this.server.emit(EVENTO_WS_MESA_ACTUALIZADA, payload);
   }
 
@@ -114,6 +120,8 @@ export class CocinaGateway implements OnGatewayConnection, OnGatewayDisconnect {
     mesa: { id: string; numero: number },
     tipo: string,
   ): void {
+    if (!this.server) return;
+
     const payload = {
       ordenId,
       mesaId: mesa.id,

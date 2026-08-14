@@ -54,6 +54,35 @@ textarea {
   animation-fill-mode: forwards;
 }
 
+.print-only {
+  display: none;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  body.invoice-print-view * {
+    visibility: hidden;
+  }
+  body.invoice-print-view .invoice-document,
+  body.invoice-print-view .invoice-document * {
+    visibility: visible;
+  }
+  body.invoice-print-view .invoice-document {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+  }
+}
+
 html[data-comanda-density='compact'] .comanda-density-grid {
   gap: 0.5rem;
 }

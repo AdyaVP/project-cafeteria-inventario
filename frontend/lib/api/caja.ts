@@ -1,8 +1,14 @@
 import { apiFetch } from './client'
-import { FacturaSchema, PreCuentaSchema, ReporteDiarioSchema } from './schemas'
+import {
+  FacturaDetalleSchema,
+  FacturaSchema,
+  PreCuentaSchema,
+  ReporteDiarioSchema,
+} from './schemas'
 import type {
   EmitirFacturaDto,
   Factura,
+  FacturaDetalle,
   PreCuentaResponse,
   ReporteDiario,
   RequestOptions,
@@ -22,6 +28,14 @@ export const cajaApi = {
       method: 'POST',
       body: JSON.stringify(dto),
       schema: FacturaSchema,
+    }),
+  getFactura: (
+    id: string,
+    options: RequestOptions = {}
+  ): Promise<FacturaDetalle> =>
+    apiFetch(`/caja/factura/${id}`, {
+      ...options,
+      schema: FacturaDetalleSchema,
     }),
   getReporteDiario: (
     fecha: string,

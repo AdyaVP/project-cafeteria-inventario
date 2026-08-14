@@ -135,6 +135,22 @@ export interface Factura {
   rtn?: string
   fechaEmision: string
 }
+export interface FacturaDetalle {
+  id: string
+  mesa: { numero: number } | string
+  itemsSnapshot: ItemFactura[]
+  subtotal: number
+  impuesto: number
+  total: number
+  metodoPago: MetodoPago
+  estado: 'PENDIENTE' | 'PAGADA' | 'ANULADA'
+  cajero: { nombre: string } | string
+  cai?: string
+  rtn?: string
+  razonSocial?: string
+  fechaEmision: string
+  createdAt: string
+}
 export interface PreCuentaResponse {
   mesa: { id: string; numero: number }
   ordenes: Array<{ id: string }>

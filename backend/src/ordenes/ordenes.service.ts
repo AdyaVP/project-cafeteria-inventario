@@ -192,6 +192,19 @@ export class OrdenesService {
     return ordenesPopuladas.map((orden) => this._toResponse(orden));
   }
 
+  async listarActivas(
+    limite = 100,
+  ): Promise<(OrdenCocinaResponse | OrdenCafeteriaResponse)[]> {
+    const ordenes = await this._populateFind(
+      this.ordenModel
+        .find({ estadoGeneral: { $ne: OrdenEstado.ENTREGADA } })
+        .sort({ createdAt: -1 })
+        .limit(limite),
+    );
+
+    return ordenes.map((orden) => this._toResponse(orden));
+  }
+
   async listarPorMesa(
     mesaId: string,
     limite = 100,

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, type FormEvent } from 'react'
+import { useRouter } from 'next/navigation'
 import { Clock, Receipt } from 'lucide-react'
 import clsx from 'clsx'
 import { z } from 'zod'
@@ -67,6 +68,7 @@ export default function FacturacionPage(): React.JSX.Element | null {
 }
 
 function FacturacionContent(): React.JSX.Element {
+  const router = useRouter()
   const { socket } = useWebSocket()
   const {
     mesasPendientes,
@@ -85,7 +87,6 @@ function FacturacionContent(): React.JSX.Element {
   const [cai, setCai] = useState('')
   const [formErrors, setFormErrors] = useState<FacturacionFormErrors>({})
   const [emitiendo, setEmitiendo] = useState(false)
-  const [facturaEmitidaId, setFacturaEmitidaId] = useState<string | null>(null)
   const cambio =
     metodoPago === 'EFECTIVO' && montoRecibido
       ? Number.parseFloat(montoRecibido) - (preCuenta?.total ?? 0)
@@ -159,18 +160,14 @@ function FacturacionContent(): React.JSX.Element {
     setFormErrors({})
     setEmitiendo(true)
     try {
-      const factura = await emitirFactura({
+      const facturaEmitida = await emitirFactura({
         mesaId: mesaSeleccionada.id,
         metodoPago: result.data.metodoPago,
         rtn: result.data.rtn || undefined,
         cai: result.data.cai || undefined,
       })
-      setFacturaEmitidaId(factura.id)
-      toast.success('Factura emitida y mesa liberada correctamente')
-      setMetodoPago(null)
-      setMontoRecibido('')
-      setRtn('')
-      setCai('')
+      toast.success('Factura emitida correctamente')
+      router.push(`/factura/${facturaEmitida.id}`)
     } catch (err: unknown) {
       toast.error(
         err instanceof Error ? err.message : 'Error al emitir la factura'
@@ -186,23 +183,6 @@ function FacturacionContent(): React.JSX.Element {
 
   return (
     <div className="relative -m-4 flex min-h-[calc(100dvh-5rem)] flex-col md:-m-6 lg:h-[calc(100%+3rem)] lg:min-h-0 lg:flex-row lg:overflow-hidden">
-      {facturaEmitidaId && (
-        <div
-          role="status"
-          className="fixed inset-x-4 top-4 z-20 flex items-center justify-between gap-3 rounded-lg border border-state-success/40 bg-bg-overlay px-4 py-3 shadow-lg sm:absolute sm:left-1/2 sm:right-auto sm:-translate-x-1/2"
-        >
-          <span className="text-sm text-state-success">
-            Factura #{facturaEmitidaId.slice(-6)} emitida · mesa liberada
-          </span>
-          <button
-            type="button"
-            className="min-h-[44px] text-xs text-text-secondary hover:text-text-primary"
-            onClick={() => setFacturaEmitidaId(null)}
-          >
-            Cerrar
-          </button>
-        </div>
-      )}
       <aside className="flex max-h-56 w-full shrink-0 flex-col border-b border-border-subtle bg-bg-surface lg:max-h-none lg:w-[300px] lg:border-b-0 lg:border-r">
         <header className="border-b border-border-subtle p-4 text-[10px] uppercase tracking-widest text-text-secondary">
           Mesas con cuenta pendiente

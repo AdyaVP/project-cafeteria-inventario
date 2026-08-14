@@ -39,6 +39,14 @@ export class OrdenesController {
     return this.ordenesService.crearOrden(dto, usuario.sub);
   }
 
+  @Get()
+  @Roles(Role.MESERO, Role.ADMIN)
+  async listarActivas(): Promise<
+    (OrdenCocinaResponse | OrdenCafeteriaResponse)[]
+  > {
+    return this.ordenesService.listarActivas();
+  }
+
   @Get('mesa/:mesaId')
   @Roles(Role.MESERO, Role.CAJERO, Role.ADMIN)
   async listarPorMesa(
