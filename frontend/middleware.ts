@@ -5,27 +5,31 @@ const PUBLIC_ROUTES = ['/login']
 
 export function middleware(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl
-  const hasCookie = request.cookies.has('access_token')
 
-  const isPublic = PUBLIC_ROUTES.some((route) => pathname.startsWith(route))
+  const isPublic = PUBLIC_ROUTES.some((route) =>
+    pathname.startsWith(route)
+  )
 
-  // Ruta protegida sin cookie → redirigir a login
+  // Usar request.cookies.get() en lugar de .has()
+  // para compatibilidad con edge runtime
+  const cookie = request.cookies.get('access_token')
+  const hasCookie = cookie !== undefined && cookie.value !== ''
+
   if (!isPublic && !hasCookie) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('from', pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  // El middleware no interpreta identidad ni roles. En /login, /auth/me es la
-  // fuente de verdad y el cliente redirige a la ruta predeterminada del rol.
+  if (pathname === '/login' && hasCookie) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
   return NextResponse.next()
 }
 
 export const config = {
-  // Interceptar TODAS las rutas excepto:
-  // - archivos estáticos de Next.js
-  // - imágenes optimizadas
-  // - favicon
-  // - carpeta public/images
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|images/).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|images/).*)',
+  ],
 }
