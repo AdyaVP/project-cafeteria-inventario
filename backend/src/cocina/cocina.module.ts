@@ -1,9 +1,15 @@
 import { Module } from '@nestjs/common';
-import { CocinaController } from './cocina.controller';
-import { CocinaService } from './cocina.service';
-import { CocinaGateway } from './cocina.gateway';
+
+import { AuthModule } from '../auth/auth.module.js';
+import { OrdenesModule } from '../ordenes/ordenes.module.js';
+import { UsuariosModule } from '../usuarios/usuarios.module.js';
+
+import { CocinaController } from './cocina.controller.js';
+import { CocinaService } from './cocina.service.js';
+import { CocinaGateway } from './cocina.gateway.js';
 
 @Module({
+  imports: [AuthModule, OrdenesModule, UsuariosModule],
   controllers: [CocinaController],
   providers: [CocinaService, CocinaGateway],
 })

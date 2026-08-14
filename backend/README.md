@@ -168,7 +168,7 @@ docs(readme): agregar instrucciones de setup
    git push origin feature/tu-rama
    ```
 3. Abre el PR en GitHub apuntando a `develop` — **nunca a `main`**
-4. Espera el review de **@ValeriaC** antes de mergear
+4. Espera el review  antes de mergear
 5. No mergees tu propio PR
 
 ---
@@ -189,3 +189,192 @@ docs(readme): agregar instrucciones de setup
 ## Contacto
 
 Dudas técnicas o problemas con el setup → habla con **Valeria**.
+---
+
+# Documentación de API — Fase 6
+
+## Convenciones generales
+
+- Prefijo global: `/api`
+- Contrato de respuestas:
+  - Éxito: `{ "success": true, "data": ... }`
+  - Error: `{ "success": false, "statusCode": N, "message": "...", "path": "..." }`
+- Autenticación: cookie HttpOnly `access_token` (JWT) — `SameSite=Strict`, `secure` solo en producción
+- Roles: `ADMIN`, `MESERO`, `CAJERO`, `COCINA`
+- Todos los `POST`/`PATCH` con body validan con Zod (`ZodValidationPipe`)
+- IDs malformados → `400` (nunca `404`)
+- Rate limiting: 100 requests / 60s por IP (`429` al exceder)
+
+## Auth
+
+| Método | Ruta | Rol | Body | Respuesta |
+|---|---|---|---|---|
+| POST | `/api/auth/login` | público | `{ email, password }` | `200` → `{ user, message }` + cookie |
+| POST | `/api/auth/logout` | autenticado | — | `200` → `{ message }` + cookie limpia |
+| GET | `/api/auth/me` | autenticado | — | `200` → usuario sin password |
+| POST | `/api/auth/registro` | ADMIN | `{ nombre, email, password, roles[] }` | `201` → usuario creado |
+
+**Errores:** login inválido → `401 "Credenciales inválidas"` (genérico). Email duplicado → `409`. Usuario desactivado con token vigente → `401`.
+
+## Usuarios
+
+| Método | Ruta | Rol | Descripción |
+|---|---|---|---|
+| GET | `/api/usuarios` | ADMIN | Lista usuarios activos (ordenados por nombre) |
+| GET | `/api/usuarios/:id` | ADMIN | Detalle de usuario |
+| PATCH | `/api/usuarios/:id/roles` | ADMIN | `{ roles[] }` — actualizar roles |
+| PATCH | `/api/usuarios/:id/desactivar` | ADMIN | Soft delete (`activo: false`) |
+
+## Productos y Recetas
+
+| Método | Ruta | Rol | Descripción |
+|---|---|---|---|
+| GET | `/api/productos` | ADMIN, CAJERO, MESERO | Todos los productos |
+| GET | `/api/productos/disponibles` | +COCINA | Solo `disponible: true` |
+| GET | `/api/productos/:id` | ADMIN, CAJERO, MESERO, COCINA | Detalle |
+| POST | `/api/productos` | ADMIN | Crear COMIDA o BEBIDA (discriminado por `tipo`) |
+| PATCH | `/api/productos/:id` | ADMIN | Actualizar (no cambia tipo) |
+| PATCH | `/api/productos/:id/disponibilidad` | ADMIN | Toggle disponible |
+| GET | `/api/recetas` | ADMIN, COCINA | Lista recetas |
+| GET | `/api/recetas/:productoId` | ADMIN, COCINA | Receta de un producto |
+| POST | `/api/recetas` | ADMIN, COCINA | `{ productoId, ingredientes: [{ inventarioItemId, cantidad }] }` |
+
+**Body ejemplo producto COMIDA:** `{ "nombre": "Hamburguesa", "precio": 120, "tipo": "COMIDA", "tiempoPreparacionMin": 8, "calorias": 550, "alergenos": [] }`
+**Body ejemplo producto BEBIDA:** `{ "nombre": "Cafe", "precio": 45, "tipo": "BEBIDA", "temperatura": "CALIENTE", "tamanosDisponibles": [{ "nombre": "Chico", "precioAdicional": 0 }] }`
+
+## Inventario
+
+| Método | Ruta | Rol | Descripción |
+|---|---|---|---|
+| GET | `/api/inventario` | ADMIN, COCINA | Lista ítems |
+| GET | `/api/inventario/alertas` | ADMIN, COCINA | ítems con `stockActual <= stockMinimo` |
+| GET | `/api/inventario/:id` | ADMIN, COCINA | Detalle |
+| POST | `/api/inventario` | ADMIN | `{ nombre, unidad, stockActual, stockMinimo, costoUnitario }` |
+| PATCH | `/api/inventario/:id/stock` | ADMIN, COCINA | `{ cantidad, operacion: "AGREGAR" | "DESCONTAR" }` |
+
+## Mesas
+
+| Método | Ruta | Rol | Descripción |
+|---|---|---|---|
+| GET | `/api/mesas` | ADMIN, MESERO, CAJERO | Todas las mesas con estado |
+| GET | `/api/mesas/:id` | ADMIN, MESERO, CAJERO | Detalle |
+| POST | `/api/mesas` | ADMIN | `{ numero, capacidad }` |
+| PATCH | `/api/mesas/:id/abrir` | MESERO | Abre la mesa (el mesero viene de `@CurrentUser`) |
+| PATCH | `/api/mesas/:id/solicitar-cuenta` | MESERO | Mesa → `CUENTA_PEDIDA` |
+
+**Estados:** `LIBRE → OCUPADA → CUENTA_PEDIDA → LIBRE`. Transiciones inválidas → `400`. Apertura concurrente protegida (CAS) — solo una gana.
+
+## Órdenes
+
+| Método | Ruta | Rol | Descripción |
+|---|---|---|---|
+| POST | `/api/ordenes` | MESERO | Crea orden mixta: `{ mesaId, items: [{ productoId, cantidad, notas? }] }` |
+| GET | `/api/ordenes/mesa/:mesaId` | MESERO, CAJERO, ADMIN | Órdenes activas de la mesa |
+| PATCH | `/api/ordenes/:id/entregar` | MESERO | Marca ENTREGADA (requiere todos los items LISTO) |
+
+**Modelo de dominio:** un submit mixto produce **2 documentos** — `OrdenCocina` (`tipo: "COCINA"`) y `OrdenCafeteria` (`tipo: "CAFETERIA"`) — independientes, de la misma mesa y mesero, sin entidad padre. La separación existe solo para preparación; **COCINA opera ambas**.
+
+**Estados:** `PENDIENTE → EN_PREPARACION → LISTA → ENTREGADA` (por orden). Items: `PENDIENTE → EN_PREPARACION → LISTO → ENTREGADO` (el mesero solo puede entregar si todos los items están LISTO).
+
+**Atomicidad:** `crearOrden` corre en una **transacción Mongo** (requiere replica set): valida → descuenta inventario → crea documentos. Si cualquier paso falla, todo se revierte. El descuento de stock es atómico frente a concurrencia (2 pedidos simultáneos sobre stock insuficiente → solo 1 gana).
+
+## Cocina
+
+| Método | Ruta | Rol | Descripción |
+|---|---|---|---|
+| GET | `/api/cocina/cola` | COCINA | Cola PENDIENTE + EN_PREPARACION (**COCINA y CAFETERIA**), más antiguas primero |
+| PATCH | `/api/cocina/:ordenId/preparacion` | COCINA | → EN_PREPARACION |
+| PATCH | `/api/cocina/:ordenId/lista` | COCINA | → LISTA (todos los items → LISTO) |
+
+## Caja
+
+| Método | Ruta | Rol | Descripción |
+|---|---|---|---|
+| GET | `/api/caja/pre-cuenta/:mesaId` | CAJERO, MESERO, ADMIN | Resumen de órdenes ENTREGADAS desde `abiertaEn` (subtotal, impuesto, total) |
+| POST | `/api/caja/factura` | CAJERO | `{ mesaId, metodoPago, rtn?, cai? }` — emite factura y libera mesa (transacción + CAS: doble cobro imposible) |
+| GET | `/api/caja/factura/:id` | CAJERO, ADMIN | Detalle de factura |
+| PATCH | `/api/caja/factura/:id/anular` | ADMIN | `{ justificacion }` (mín 10 chars). No reabre mesa. |
+| GET | `/api/caja/reportes/diario?fecha=YYYY-MM-DD` | ADMIN | Total cobrado, desglose por método, mesas atendidas, ticket promedio (zona Honduras) |
+
+**Snapshot inmutable:** la factura guarda `itemsSnapshot` (nombre, cantidad, precioUnitario, subtotal) en el momento del cobro. Un cambio futuro de precio NO altera facturas históricas.
+
+---
+
+# WebSockets — Fase 6
+
+## Conexión
+
+- **Namespace:** `/cocina`
+- **Autenticación:** cookie HttpOnly `access_token` en el handshake (JWT). Sin token o token inválido → **desconexión inmediata**. No hay conexiones anónimas.
+- **Reconexión:** el cliente configura `reconnection: true` (5 intentos, 1s de delay).
+
+## Rooms
+
+| Room | Quién entra | Propósito |
+|---|---|---|
+| `cocina` | Clientes con rol **COCINA** | Cola de cocina y estado de órdenes |
+| `user:{sub}` | **Todos** los clientes autenticados | Eventos dirigidos al usuario (notificación al mesero) |
+
+El ID de usuario proviene **del JWT verificado por el servidor** (`payload.sub`) — el cliente no puede elegir a qué room se une.
+
+## Eventos
+
+### `nueva-orden`
+- **Emisor:** `CocinaGateway` (al crear una orden)
+- **Destino:** room `cocina`
+- **Payload:**
+```json
+{
+  "ordenes": [ /* OrdenResponse[] */ ],
+  "mesaId": "...",
+  "timestamp": "..."
+}
+```
+
+### `orden-actualizada`
+- **Emisor:** `CocinaGateway` (al marcar EN_PREPARACION o LISTA)
+- **Destino:** room `cocina` **y** `user:{meseroId}` (el mesero de la orden)
+- **Payload:**
+```json
+{
+  "ordenId": "...",
+  "mesaId": "...",
+  "mesaNumero": 4,
+  "meseroId": "...",
+  "tipo": "COCINA | CAFETERIA",
+  "nuevoEstado": "EN_PREPARACION | LISTA",
+  "timestamp": "..."
+}
+```
+- **Uso mesero:** el frontend filtra `nuevoEstado === "LISTA"` para notificar "orden lista para entregar".
+
+### `mesa-actualizada`
+- **Emisor:** `CocinaGateway` (cambio de estado de mesa: abrir, solicitar cuenta, liberar)
+- **Destino:** **broadcast** a todos los clientes conectados
+- **Payload:**
+```json
+{
+  "mesaId": "...",
+  "nuevoEstado": "OCUPADA | CUENTA_PEDIDA | LIBRE",
+  "timestamp": "..."
+}
+```
+
+---
+
+# Seed
+
+```bash
+npm run seed
+```
+
+Crea (o recrea) datos de catálogo deterministas: 4 usuarios demo (`admin|mesero|cajero|cocina@demo.local`, password `Test1234`), inventario, productos COMIDA/BEBIDA, recetas (solo COMIDA) y mesas 1-6 LIBRES. **Idempotente** (borra y recrea) y **se niega a ejecutarse con `NODE_ENV=production`**.
+
+# Tests
+
+```bash
+npm test          # unit (40 tests)
+npm run test:e2e  # integración + E2E + WebSocket (requiere Mongo con replica set)
+```
+
+Cobertura E2E: flujo completo de Fase 6 (orden mixta, 2 rondas, factura única, anulación, reporte), concurrencia (overbooking de stock, apertura de mesa), rate limiting real (429) y WebSocket mesero (recibe `LISTA`, aislamiento por room).

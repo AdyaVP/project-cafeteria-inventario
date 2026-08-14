@@ -1,10 +1,17 @@
 import { NestFactory } from '@nestjs/core';
-import { VersioningType } from '@nestjs/common';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import { AppModule } from './app.module';
+import { AppModule } from './app.module.js';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor.js';
 
-const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'PORT'] as const;
+const requiredEnvVars = [
+  'MONGODB_URI',
+  'JWT_SECRET',
+  'PORT',
+  'FRONTEND_URL',
+  'IMPUESTO_PORCENTAJE',
+] as const;
 
 function validateEnv(): void {
   const missing = requiredEnvVars.filter((key) => !process.env[key]);
@@ -32,10 +39,9 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
-  app.enableVersioning({
-    type: VersioningType.URI,
-    defaultVersion: '1',
-  });
+  // Principio 6 — filtros globales registrados una sola vez
+  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ResponseInterceptor());
 
   const port = process.env.PORT || 4000;
   await app.listen(port);

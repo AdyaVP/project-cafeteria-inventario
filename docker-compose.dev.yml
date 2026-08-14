@@ -1,0 +1,68 @@
+services:
+  mongodb:
+    image: mongo:7
+    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: echo 'db.runCommand("ping")' | mongosh --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - cafeteria_net
+
+  mongo-init:
+    image: mongo:7
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./backend/scripts/rs-init.sh:/rs-init.sh:ro
+    entrypoint: ['/bin/sh', '/rs-init.sh']
+    restart: 'no'
+    networks:
+      - cafeteria_net
+
+  mongo-express:
+    image: mongo-express
+    ports:
+      - '8081:8081'
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/
+      ME_CONFIG_BASICAUTH: "false"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cafeteria_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./backend/.env
+    ports:
+      - '4000:4000'
+    environment:
+      PORT: 4000
+      MONGODB_URI: mongodb://mongodb:27017/cafeteria
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cafeteria_net
+
+networks:
+  cafeteria_net:
+    driver: bridge
+
+volumes:
+  mongo_data:

@@ -1,0 +1,6 @@
+export enum OrdenEstado {
+  PENDIENTE = 'PENDIENTE',
+  EN_PREPARACION = 'EN_PREPARACION',
+  LISTA = 'LISTA',
+  ENTREGADA = 'ENTREGADA',
+}

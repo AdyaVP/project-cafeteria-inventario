@@ -12,3 +12,5 @@ coverage/
 
 *.log
 npm-debug.log*
+
+plan.md
