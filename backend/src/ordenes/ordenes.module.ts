@@ -8,6 +8,7 @@ import { InventarioModule } from '../inventario/inventario.module.js';
 import { Orden, OrdenSchema } from './schemas/orden.schema.js';
 import { OrdenCocina, OrdenCocinaSchema } from './schemas/orden-cocina.schema.js';
 import { OrdenCafeteria, OrdenCafeteriaSchema } from './schemas/orden-cafeteria.schema.js';
+import { TipoOrden } from './schemas/tipo-orden.enum.js';
 import { OrdenesController } from './ordenes.controller.js';
 import { OrdenesService } from './ordenes.service.js';
 
@@ -18,8 +19,16 @@ import { OrdenesService } from './ordenes.service.js';
         name: Orden.name,
         schema: OrdenSchema,
         discriminators: [
-          { name: OrdenCocina.name, schema: OrdenCocinaSchema },
-          { name: OrdenCafeteria.name, schema: OrdenCafeteriaSchema },
+          {
+            name: OrdenCocina.name,
+            schema: OrdenCocinaSchema,
+            value: TipoOrden.COCINA,
+          },
+          {
+            name: OrdenCafeteria.name,
+            schema: OrdenCafeteriaSchema,
+            value: TipoOrden.CAFETERIA,
+          },
         ],
       },
     ]),

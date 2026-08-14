@@ -75,12 +75,10 @@ export class InventarioController {
 
   @Patch(':id/stock')
   @Roles(Role.ADMIN, Role.COCINA)
-  @UsePipes(
-    new ZodValidationPipe(UpdateStockSchema),
-  )
   async actualizarStock(
     @Param('id') id: string,
-    @Body() dto: UpdateStockDto,
+    @Body(new ZodValidationPipe(UpdateStockSchema))
+    dto: UpdateStockDto,
   ) {
     return this.inventarioService.ajustarStock(
       id,

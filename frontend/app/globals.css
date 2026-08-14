@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  min-height: 100%;
+}
+body {
+  @apply bg-bg-base font-sans text-text-primary antialiased;
+  margin: 0;
+}
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid theme('colors.accent.DEFAULT');
+  outline-offset: 2px;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme('colors.border.default') theme('colors.bg.surface');
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: theme('colors.bg.surface');
+}
+*::-webkit-scrollbar-thumb {
+  background: theme('colors.border.default');
+  border-radius: 4px;
+}
+@keyframes toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+.animate-toast-progress {
+  animation-name: toast-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  body.invoice-print-view * {
+    visibility: hidden;
+  }
+  body.invoice-print-view .invoice-document,
+  body.invoice-print-view .invoice-document * {
+    visibility: visible;
+  }
+  body.invoice-print-view .invoice-document {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+  }
+}
+
+html[data-comanda-density='compact'] .comanda-density-grid {
+  gap: 0.5rem;
+}
+
+html[data-comanda-motion='reduced'] *,
+html[data-comanda-motion='reduced'] *::before,
+html[data-comanda-motion='reduced'] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}

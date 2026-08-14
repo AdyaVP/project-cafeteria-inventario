@@ -10,6 +10,7 @@ import { Temperatura } from './temperatura.enum.js';
 @Schema()
 export class ProductoBebida extends Producto {
   @Prop({
+    type: String,
     required: true,
     enum: Temperatura,
   })

@@ -1,15 +1,13 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { InventarioModule } from '../inventario/inventario.module.js';
 
 import { ProductosController } from './productos.controller';
 import { ProductosService } from './productos.service';
 import { RecetasController } from './recetas.controller.js';
 import { RecetasService } from './recetas.service.js';
 
-import {
-  Producto,
-  ProductoSchema,
-} from './schemas/producto.schema.js';
+import { Producto, ProductoSchema } from './schemas/producto.schema.js';
 
 import {
   ProductoComida,
@@ -21,17 +19,13 @@ import {
   ProductoBebidaSchema,
 } from './schemas/producto-bebida.schema.js';
 
-import {
-  ProductoTipo,
-} from './schemas/producto-tipo.enum.js';
+import { ProductoTipo } from './schemas/producto-tipo.enum.js';
 
-import {
-  Receta,
-  RecetaSchema,
-} from './schemas/receta.schema.js';
+import { Receta, RecetaSchema } from './schemas/receta.schema.js';
 
 @Module({
   imports: [
+    InventarioModule,
     MongooseModule.forFeature([
       {
         name: Producto.name,
@@ -55,17 +49,8 @@ import {
       },
     ]),
   ],
-  controllers: [
-    ProductosController,
-    RecetasController,
-  ],
-  providers: [
-    ProductosService,
-    RecetasService,
-  ],
-  exports: [
-    ProductosService,
-    RecetasService,
-  ],
+  controllers: [ProductosController, RecetasController],
+  providers: [ProductosService, RecetasService],
+  exports: [ProductosService, RecetasService],
 })
 export class ProductosModule {}

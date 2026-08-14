@@ -52,6 +52,12 @@ export class Mesa {
     default: null,
   })
   cerradaEn!: Date | null;
+
+  @Prop({
+    type: Date,
+    default: null,
+  })
+  ultimaOrdenEn!: Date | null;
 }
 
 export const MesaSchema = SchemaFactory.createForClass(Mesa);

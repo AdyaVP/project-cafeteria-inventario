@@ -48,7 +48,13 @@ export class AuthService {
   }
 
   async getMe(userId: string): Promise<UsuarioResponse> {
-    return this.usuariosService.buscarPorId(userId);
+    const usuario = await this.usuariosService.buscarPorId(userId);
+
+    if (!usuario.activo) {
+      throw new UnauthorizedException(MSG_CREDENCIALES_INVALIDAS);
+    }
+
+    return usuario;
   }
 
   private _toPublicUser(doc: UsuarioDocument): UsuarioResponse {

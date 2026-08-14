@@ -1,7 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
 import { OrdenEstado } from '../ordenes/schemas/orden-estado.enum.js';
-import { TipoOrden } from '../ordenes/schemas/tipo-orden.enum.js';
 import { OrdenesService } from '../ordenes/ordenes.service.js';
 import { OrdenCocinaResponse } from '../ordenes/interfaces/orden-response.interface.js';
 
@@ -24,11 +23,13 @@ export class CocinaService {
   ): Promise<OrdenCocinaResponse> {
     const response = await this.ordenesService.marcarEnPreparacion(ordenId);
 
-    if (response.tipo !== TipoOrden.COCINA) {
-      throw new BadRequestException('La orden no es de tipo COCINA');
-    }
-
-    this.cocinaGateway.emitirEstadoOrden(ordenId, OrdenEstado.EN_PREPARACION);
+    this.cocinaGateway.emitirEstadoOrden(
+      ordenId,
+      OrdenEstado.EN_PREPARACION,
+      response.mesero.id,
+      response.mesa,
+      response.tipo,
+    );
 
     return response as OrdenCocinaResponse;
   }
@@ -36,11 +37,13 @@ export class CocinaService {
   async marcarLista(ordenId: string): Promise<OrdenCocinaResponse> {
     const response = await this.ordenesService.marcarLista(ordenId);
 
-    if (response.tipo !== TipoOrden.COCINA) {
-      throw new BadRequestException('La orden no es de tipo COCINA');
-    }
-
-    this.cocinaGateway.emitirEstadoOrden(ordenId, OrdenEstado.LISTA);
+    this.cocinaGateway.emitirEstadoOrden(
+      ordenId,
+      OrdenEstado.LISTA,
+      response.mesero.id,
+      response.mesa,
+      response.tipo,
+    );
 
     return response as OrdenCocinaResponse;
   }

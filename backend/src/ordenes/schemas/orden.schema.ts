@@ -38,6 +38,14 @@ export class Orden {
           ref: 'Producto',
           required: true,
         },
+        nombreProductoSnapshot: {
+          type: String,
+          trim: true,
+        },
+        precioUnitarioSnapshot: {
+          type: Number,
+          min: 0,
+        },
         cantidad: {
           type: Number,
           required: true,
@@ -62,6 +70,8 @@ export class Orden {
   items: {
     _id: Types.ObjectId;
     producto: Types.ObjectId;
+    nombreProductoSnapshot?: string;
+    precioUnitarioSnapshot?: number;
     cantidad: number;
     notas?: string;
     estadoItem: ItemEstado;

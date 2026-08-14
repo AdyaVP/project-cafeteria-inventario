@@ -1,11 +1,13 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Model, Types, type Query } from 'mongoose';
+import type { ClientSession } from 'mongoose';
 
 import { MesaEstado } from '../mesas/schemas/mesa.schema.js';
 import { MesasService } from '../mesas/mesas.service.js';
@@ -19,8 +21,6 @@ import {
 import { ProductoTipo } from '../productos/schemas/producto-tipo.enum.js';
 
 import { Orden, OrdenDocument } from './schemas/orden.schema.js';
-import { OrdenCocina } from './schemas/orden-cocina.schema.js';
-import { OrdenCafeteria } from './schemas/orden-cafeteria.schema.js';
 import { OrdenEstado } from './schemas/orden-estado.enum.js';
 import { ItemEstado } from './schemas/item-estado.enum.js';
 import { TipoOrden } from './schemas/tipo-orden.enum.js';
@@ -35,6 +35,8 @@ import {
 
 interface ItemProcesado {
   productoId: Types.ObjectId;
+  nombreProductoSnapshot: string;
+  precioUnitarioSnapshot: number;
   cantidad: number;
   notas?: string;
   estadoItem: ItemEstado;
@@ -49,6 +51,8 @@ interface GrupoItems {
 interface PopulatedItem {
   _id: Types.ObjectId;
   producto: { _id: Types.ObjectId; nombre: string; precio: number };
+  nombreProductoSnapshot?: string;
+  precioUnitarioSnapshot?: number;
   cantidad: number;
   notas?: string;
   estadoItem: ItemEstado;
@@ -116,27 +120,64 @@ export class OrdenesService {
     this._validarObjectId(dto.mesaId);
     this._validarObjectId(meseroId);
 
-    const mesa = await this.mesasService.buscarPorId(dto.mesaId);
+    const session = await this.ordenModel.db.startSession();
+    let idsDocumentos: Types.ObjectId[] = [];
 
-    if (mesa.estado !== MesaEstado.OCUPADA) {
-      throw new BadRequestException(
-        `La mesa debe estar ocupada para recibir una orden. Estado actual: ${mesa.estado}`,
-      );
+    try {
+      await session.withTransaction(async () => {
+        const mesa = await this.mesasService.buscarPorId(dto.mesaId, session);
+
+        if (mesa.estado !== MesaEstado.OCUPADA) {
+          throw new BadRequestException(
+            `La mesa debe estar ocupada para recibir una orden. Estado actual: ${mesa.estado}`,
+          );
+        }
+
+        if (mesa.meseroActual?.id !== meseroId) {
+          throw new ForbiddenException(
+            'Solo el mesero asignado puede crear órdenes para esta mesa',
+          );
+        }
+
+        const usuarioAutorizado = await this.mesasService.confirmarMeseroActivo(
+          meseroId,
+          session,
+        );
+
+        if (!usuarioAutorizado) {
+          throw new ForbiddenException(
+            'El usuario ya no está activo o no tiene rol MESERO',
+          );
+        }
+
+        await this.mesasService.confirmarMesaAceptaOrden(
+          dto.mesaId,
+          meseroId,
+          mesa.abiertaEn,
+          session,
+        );
+
+        const productosValidados = await this._validarProductos(
+          dto.items,
+          session,
+        );
+
+        const grupos = this._separarItemsPorTipo(dto.items, productosValidados);
+
+        await this._verificarStock(grupos, session);
+
+        await this._descontarInventario(grupos, session);
+
+        idsDocumentos = await this._crearDocumentos(
+          grupos,
+          dto.mesaId,
+          meseroId,
+          session,
+        );
+      });
+    } finally {
+      await session.endSession();
     }
-
-    const productosValidados = await this._validarProductos(dto.items);
-
-    const grupos = this._separarItemsPorTipo(dto.items, productosValidados);
-
-    await this._verificarStock(grupos);
-
-    await this._descontarInventario(grupos);
-
-    const idsDocumentos = await this._crearDocumentos(
-      grupos,
-      dto.mesaId,
-      meseroId,
-    );
 
     const ordenesPopuladas = await this._populateFind(
       this.ordenModel.find({ _id: { $in: idsDocumentos } }),
@@ -149,6 +190,19 @@ export class OrdenesService {
     });
 
     return ordenesPopuladas.map((orden) => this._toResponse(orden));
+  }
+
+  async listarActivas(
+    limite = 100,
+  ): Promise<(OrdenCocinaResponse | OrdenCafeteriaResponse)[]> {
+    const ordenes = await this._populateFind(
+      this.ordenModel
+        .find({ estadoGeneral: { $ne: OrdenEstado.ENTREGADA } })
+        .sort({ createdAt: -1 })
+        .limit(limite),
+    );
+
+    return ordenes.map((orden) => this._toResponse(orden));
   }
 
   async listarPorMesa(
@@ -176,8 +230,16 @@ export class OrdenesService {
 
   async marcarOrdenEntregada(
     ordenId: string,
+    meseroId: string,
   ): Promise<OrdenCocinaResponse | OrdenCafeteriaResponse> {
+    this._validarObjectId(meseroId);
     const orden = await this._buscarOrdenPorId(ordenId);
+
+    if (orden.mesero.toString() !== meseroId) {
+      throw new ForbiddenException(
+        'Solo el mesero asignado puede entregar esta orden',
+      );
+    }
 
     if (orden.estadoGeneral === OrdenEstado.ENTREGADA) {
       throw new BadRequestException('La orden ya fue entregada');
@@ -205,7 +267,7 @@ export class OrdenesService {
 
     if (!ordenPopulada) {
       throw new NotFoundException(
-        `Orden con id ${orden._id} no encontrada después de guardar`,
+        `Orden con id ${orden._id.toString()} no encontrada después de guardar`,
       );
     }
 
@@ -213,10 +275,11 @@ export class OrdenesService {
   }
 
   async obtenerColaCocina(limite = 100): Promise<OrdenCocinaResponse[]> {
+    // La estación de cocina opera tanto OrdenCocina como OrdenCafeteria:
+    // la separación de tipos existe únicamente para preparación.
     const ordenes = await this._populateFind(
       this.ordenModel
         .find({
-          tipo: TipoOrden.COCINA,
           estadoGeneral: {
             $in: [OrdenEstado.PENDIENTE, OrdenEstado.EN_PREPARACION],
           },
@@ -274,7 +337,7 @@ export class OrdenesService {
 
     if (!ordenPopulada) {
       throw new NotFoundException(
-        `Orden con id ${orden._id} no encontrada después de guardar`,
+        `Orden con id ${orden._id.toString()} no encontrada después de guardar`,
       );
     }
 
@@ -370,8 +433,8 @@ export class OrdenesService {
       items: doc.items.map((item) => ({
         id: item._id.toString(),
         productoId: item.producto._id.toString(),
-        nombreProducto: item.producto.nombre,
-        precioUnitario: item.producto.precio,
+        nombreProducto: item.nombreProductoSnapshot ?? item.producto.nombre,
+        precioUnitario: item.precioUnitarioSnapshot ?? item.producto.precio,
         cantidad: item.cantidad,
         notas: item.notas,
         estadoItem: item.estadoItem,
@@ -417,6 +480,7 @@ export class OrdenesService {
 
   private async _validarProductos(
     items: CrearOrdenItemDto[],
+    session?: ClientSession,
   ): Promise<Map<string, ProductoDetalle>> {
     const lookup = new Map<string, ProductoDetalle>();
 
@@ -427,7 +491,10 @@ export class OrdenesService {
         continue;
       }
 
-      const producto = await this.productosService.buscarPorId(item.productoId);
+      const producto = await this.productosService.buscarPorId(
+        item.productoId,
+        session,
+      );
 
       if (!producto.disponible) {
         throw new BadRequestException(
@@ -458,6 +525,8 @@ export class OrdenesService {
 
       const procesado: ItemProcesado = {
         productoId: new Types.ObjectId(item.productoId),
+        nombreProductoSnapshot: producto.nombre,
+        precioUnitarioSnapshot: producto.precio,
         cantidad: item.cantidad,
         notas: item.notas,
         estadoItem: ItemEstado.PENDIENTE,
@@ -484,7 +553,10 @@ export class OrdenesService {
     return grupos;
   }
 
-  private async _verificarStock(grupos: GrupoItems[]): Promise<void> {
+  private async _verificarStock(
+    grupos: GrupoItems[],
+    session?: ClientSession,
+  ): Promise<void> {
     const grupoCocina = grupos.find((g) => g.tipo === TipoOrden.COCINA);
 
     if (!grupoCocina) {
@@ -504,6 +576,7 @@ export class OrdenesService {
     for (const item of grupoCocina.items) {
       const receta = await this.recetasService.buscarPorProducto(
         item.productoId.toString(),
+        session,
       );
 
       for (const ing of receta.ingredientes) {
@@ -522,8 +595,10 @@ export class OrdenesService {
     const faltantes: string[] = [];
 
     for (const [inventarioItemId, data] of ingredientesAgrupados) {
-      const inventarioItem =
-        await this.inventarioService.buscarPorId(inventarioItemId);
+      const inventarioItem = await this.inventarioService.buscarPorId(
+        inventarioItemId,
+        session,
+      );
 
       data.nombre = inventarioItem.nombre;
       data.unidad = inventarioItem.unidad;
@@ -541,7 +616,10 @@ export class OrdenesService {
     }
   }
 
-  private async _descontarInventario(grupos: GrupoItems[]): Promise<void> {
+  private async _descontarInventario(
+    grupos: GrupoItems[],
+    session?: ClientSession,
+  ): Promise<void> {
     const grupoCocina = grupos.find((g) => g.tipo === TipoOrden.COCINA);
 
     if (!grupoCocina) {
@@ -551,6 +629,7 @@ export class OrdenesService {
     for (const item of grupoCocina.items) {
       const receta = await this.recetasService.buscarPorProducto(
         item.productoId.toString(),
+        session,
       );
 
       const ingredientesEscalados = receta.ingredientes.map((ing) => ({
@@ -558,7 +637,10 @@ export class OrdenesService {
         cantidad: ing.cantidad * item.cantidad,
       }));
 
-      await this.inventarioService.descontarPorReceta(ingredientesEscalados);
+      await this.inventarioService.descontarPorReceta(
+        ingredientesEscalados,
+        session,
+      );
     }
   }
 
@@ -566,6 +648,7 @@ export class OrdenesService {
     grupos: GrupoItems[],
     mesaId: string,
     meseroId: string,
+    session?: ClientSession,
   ): Promise<Types.ObjectId[]> {
     const ids: Types.ObjectId[] = [];
     const mesaObjectId = new Types.ObjectId(mesaId);
@@ -574,6 +657,8 @@ export class OrdenesService {
     for (const grupo of grupos) {
       const items = grupo.items.map((item) => ({
         producto: item.productoId,
+        nombreProductoSnapshot: item.nombreProductoSnapshot,
+        precioUnitarioSnapshot: item.precioUnitarioSnapshot,
         cantidad: item.cantidad,
         notas: item.notas,
         estadoItem: item.estadoItem,
@@ -594,9 +679,12 @@ export class OrdenesService {
           tiempoEstimadoMin,
         } as Record<string, unknown>;
 
-        const orden = await this.ordenModel.create(datos);
+        const orden = await this.ordenModel.create(
+          [datos],
+          session ? { session } : {},
+        );
 
-        ids.push(orden._id);
+        ids.push(orden[0]._id);
       } else {
         const datos = {
           mesa: mesaObjectId,
@@ -606,9 +694,12 @@ export class OrdenesService {
           tipo: TipoOrden.CAFETERIA,
         } as Record<string, unknown>;
 
-        const orden = await this.ordenModel.create(datos);
+        const orden = await this.ordenModel.create(
+          [datos],
+          session ? { session } : {},
+        );
 
-        ids.push(orden._id);
+        ids.push(orden[0]._id);
       }
     }
 

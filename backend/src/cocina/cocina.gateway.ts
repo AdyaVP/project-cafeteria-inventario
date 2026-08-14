@@ -12,6 +12,9 @@ import { Server, Socket } from 'socket.io';
 import { Role } from '../common/constants/roles.enum.js';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface.js';
 import { OrdenEstado } from '../ordenes/schemas/orden-estado.enum.js';
+import { UsuariosService } from '../usuarios/usuarios.service.js';
+import { EVENTO_USUARIO_AUTORIZACION_CAMBIADA } from '../usuarios/usuarios.constants.js';
+import type { UsuarioAutorizacionCambiadaPayload } from '../usuarios/usuarios.constants.js';
 
 import {
   SALA_COCINA,
@@ -39,13 +42,14 @@ interface MesaCambiadaPayload {
   namespace: '/cocina',
 })
 @Injectable()
-export class CocinaGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+export class CocinaGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly usuariosService: UsuariosService,
+  ) {}
 
   async handleConnection(client: Socket): Promise<void> {
     try {
@@ -57,38 +61,81 @@ export class CocinaGateway
       }
 
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
+      const usuario = await this.usuariosService.buscarPorId(payload.sub);
 
-      client.data.usuario = payload;
+      if (!usuario.activo) {
+        client.disconnect();
+        return;
+      }
 
-      if (payload.roles.includes(Role.COCINA)) {
-        client.join(SALA_COCINA);
+      const autorizacionActual: JwtPayload = {
+        sub: usuario.id,
+        email: usuario.email,
+        roles: usuario.roles,
+      };
+
+      const clientData = client.data as unknown as Record<string, unknown>;
+      clientData.usuario = autorizacionActual;
+
+      // Room personal por usuario: recibe eventos dirigidos a su sesion
+      await client.join(`user:${autorizacionActual.sub}`);
+
+      if (autorizacionActual.roles.includes(Role.COCINA)) {
+        await client.join(SALA_COCINA);
       }
     } catch {
       client.disconnect();
     }
   }
 
-  handleDisconnect(_client: Socket): void {}
+  handleDisconnect(): void {}
+
+  @OnEvent(EVENTO_USUARIO_AUTORIZACION_CAMBIADA)
+  manejarAutorizacionUsuarioCambiada(
+    payload: UsuarioAutorizacionCambiadaPayload,
+  ): void {
+    if (!this.server) return;
+
+    this.server.in(`user:${payload.usuarioId}`).disconnectSockets(true);
+  }
 
   @OnEvent(EVENTO_ORDEN_CREADA)
   manejarOrdenCreada(payload: OrdenCreadaPayload): void {
+    if (!this.server) return;
+
     this.server.to(SALA_COCINA).emit(EVENTO_WS_NUEVA_ORDEN, payload);
   }
 
   @OnEvent(EVENTO_MESA_ESTADO_CAMBIADO)
   manejarMesaCambiada(payload: MesaCambiadaPayload): void {
+    if (!this.server) return;
+
     this.server.emit(EVENTO_WS_MESA_ACTUALIZADA, payload);
   }
 
   emitirEstadoOrden(
     ordenId: string,
     nuevoEstado: OrdenEstado,
+    meseroId: string,
+    mesa: { id: string; numero: number },
+    tipo: string,
   ): void {
-    this.server.to(SALA_COCINA).emit(EVENTO_WS_ORDEN_ACTUALIZADA, {
+    if (!this.server) return;
+
+    const payload = {
       ordenId,
+      mesaId: mesa.id,
+      mesaNumero: mesa.numero,
+      meseroId,
+      tipo,
       nuevoEstado,
       timestamp: new Date(),
-    });
+    };
+
+    this.server.to(SALA_COCINA).emit(EVENTO_WS_ORDEN_ACTUALIZADA, payload);
+    this.server
+      .to(`user:${meseroId}`)
+      .emit(EVENTO_WS_ORDEN_ACTUALIZADA, payload);
   }
 
   private _extraerToken(client: Socket): string | null {

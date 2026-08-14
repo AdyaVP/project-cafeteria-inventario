@@ -63,7 +63,10 @@ export class MesasController {
 
   @Patch(':id/solicitar-cuenta')
   @Roles(Role.MESERO)
-  async solicitarCuenta(@Param('id') mesaId: string): Promise<MesaResponse> {
-    return this.mesasService.solicitarCuenta(mesaId);
+  async solicitarCuenta(
+    @Param('id') mesaId: string,
+    @CurrentUser() usuario: JwtPayload,
+  ): Promise<MesaResponse> {
+    return this.mesasService.solicitarCuenta(mesaId, usuario.sub);
   }
 }
